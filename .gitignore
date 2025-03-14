@@ -73,3 +73,5 @@ redis/
 .env
 .env.local
 .env.development
+
+auto_commit.sh
