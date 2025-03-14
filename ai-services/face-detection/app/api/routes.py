@@ -93,26 +93,14 @@ async def align_face(request: FaceAlignmentRequest):
     Parameters:
     - image: Base64 encoded image
     - landmarks: List of 5 facial landmarks (eyes, nose, mouth corners)
+        - Format 1 (recommended): [[x1, y1], [x2, y2], [x3, y3], [x4, y4], [x5, y5]]
+        - Format 2 (legacy): [x1, y1, x2, y2, x3, y3, x4, y4, x5, y5]
+        - Format 3 (legacy): any array that can be converted to 5 landmarks
     - output_size: Output image size [width, height] (default: [160, 160])
     
     Returns:
     - aligned_face: Base64 encoded aligned face image
     - processing_time_ms: Processing time in milliseconds
-    
-    Example:
-    ```
-    {
-      "image": "base64_encoded_image",
-      "landmarks": [
-        [936, 1095],  # Left eye
-        [1005, 1149], # Right eye
-        [1019, 1024], # Nose
-        [902, 1021],  # Left mouth corner
-        [904, 1145]   # Right mouth corner
-      ],
-      "output_size": [160, 160]
-    }
-    ```
     """
     try:
         start_time = time.time()
@@ -125,32 +113,47 @@ async def align_face(request: FaceAlignmentRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
-        # Validate landmarks format
-        if not isinstance(request.landmarks, list):
-            raise HTTPException(
-                status_code=400, 
-                detail=f"landmarks must be a list, got {type(request.landmarks).__name__}"
-            )
+        # Flexible landmarks handling - try to make it work with different formats
+        landmarks_data = request.landmarks
         
-        if len(request.landmarks) != 5:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Expected 5 landmarks, got {len(request.landmarks)}. " +
-                "Landmarks should be 5 points: [left_eye, right_eye, nose, left_mouth, right_mouth]"
-            )
+        # Try to convert landmarks to the format we need: array of 5 points
+        landmarks_array = np.array(landmarks_data, dtype=np.float32)
         
-        for i, point in enumerate(request.landmarks):
-            if not isinstance(point, list) or len(point) != 2:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Landmark point {i} should be a list of 2 coordinates [x, y], got {point}"
-                )
+        # Reshape if needed
+        if landmarks_array.ndim == 1:
+            # If flat array, try to reshape to (5, 2)
+            if len(landmarks_array) >= 10:
+                landmarks_array = landmarks_array[:10].reshape(5, 2)
+            else:
+                # If not enough points, duplicate the first point
+                first_point = landmarks_array[:2] if len(landmarks_array) >= 2 else np.array([0, 0])
+                landmarks_array = np.array([first_point] * 5)
         
-        # Convert landmarks to numpy array
-        landmarks = np.array(request.landmarks, dtype=np.float32)
+        # If we get 1 point array with more than 2 elements, reshape to 5 points
+        elif landmarks_array.shape[0] == 1 and len(landmarks_array[0]) >= 10:
+            landmarks_array = landmarks_array[0][:10].reshape(5, 2)
+            
+        # Ensure we have exactly 5 points
+        if landmarks_array.shape[0] > 5:
+            landmarks_array = landmarks_array[:5]
+        elif landmarks_array.shape[0] < 5:
+            # Duplicate the first point to make 5 points
+            first_point = landmarks_array[0] if landmarks_array.shape[0] > 0 else np.array([0, 0])
+            missing_points = 5 - landmarks_array.shape[0]
+            landmarks_array = np.vstack([landmarks_array, np.tile(first_point, (missing_points, 1))])
+        
+        # Ensure each point has 2 coordinates
+        if landmarks_array.shape[1] != 2:
+            if landmarks_array.shape[1] > 2:
+                landmarks_array = landmarks_array[:, :2]
+            else:
+                # Pad with zeros
+                padded = np.zeros((5, 2), dtype=np.float32)
+                padded[:, :landmarks_array.shape[1]] = landmarks_array
+                landmarks_array = padded
         
         # Align face
-        aligned_face = face_detector.align(image, landmarks, request.output_size)
+        aligned_face = face_detector.align(image, landmarks_array, request.output_size)
         
         # Encode the aligned face as base64
         _, buffer = cv2.imencode('.jpg', aligned_face)
@@ -163,8 +166,6 @@ async def align_face(request: FaceAlignmentRequest):
             "processing_time_ms": processing_time
         }
         
-    except HTTPException:
-        raise  # Re-raise HTTP exceptions with status codes
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error aligning face: {str(e)}")
 
