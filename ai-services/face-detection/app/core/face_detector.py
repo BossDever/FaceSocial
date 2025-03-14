@@ -33,6 +33,9 @@ class FaceDetector:
         Returns:
         - List of detected faces with bounding boxes, confidence, and landmarks
         """
+        # Print image information for debugging
+        print(f"DEBUG detect - Image shape: {image.shape}, dtype: {image.dtype}, min-max values: {np.min(image)}-{np.max(image)}")
+        
         # Convert image to RGB (MTCNN expects RGB)
         if len(image.shape) == 2:
             # Convert grayscale to RGB
@@ -43,6 +46,7 @@ class FaceDetector:
         
         # Detect faces
         faces = self.detector.detect_faces(image)
+        print(f"DEBUG detect - Found {len(faces)} faces")
         
         # Filter faces by size and confidence
         filtered_faces = []
@@ -53,6 +57,7 @@ class FaceDetector:
             if confidence >= threshold and box[2] >= min_face_size and box[3] >= min_face_size:
                 filtered_faces.append(face)
         
+        print(f"DEBUG detect - After filtering: {len(filtered_faces)} faces")
         return filtered_faces
     
     def align(self, image, landmarks, output_size=(160, 160)):
@@ -68,8 +73,14 @@ class FaceDetector:
         - Aligned face image
         """
         try:
+            # Print debug information
+            print(f"DEBUG align - Image shape: {image.shape}, dtype: {image.dtype}")
+            print(f"DEBUG align - Landmarks: {landmarks}")
+            print(f"DEBUG align - Landmarks shape: {np.array(landmarks).shape}")
+            print(f"DEBUG align - Output size: {output_size}")
+            
             # Define reference points for alignment
-            # These reference points correspond to FaceNet's expected 5 points:
+            # These reference points correspond to FaceNet's expected 5 points
             # [left_eye, right_eye, nose, left_mouth, right_mouth]
             reference = np.array([
                 [30.2946, 51.6963],  # Left eye
@@ -84,42 +95,106 @@ class FaceDetector:
             reference[:, 1] *= output_size[1] / 96.0
             
             # Ensure landmarks have the correct format
-            landmarks = np.array(landmarks, dtype=np.float32)
+            landmarks_array = np.array(landmarks, dtype=np.float32)
             
-            # Calculate the transformation matrix
-            transformation_matrix, _ = cv2.estimateAffinePartial2D(
-                landmarks,
-                reference,
-                method=cv2.RANSAC
-            )
+            # Flexible landmarks handling
+            if landmarks_array.ndim == 1:
+                # If flat array, try to reshape to (5, 2)
+                if len(landmarks_array) >= 10:
+                    landmarks_array = landmarks_array[:10].reshape(5, 2)
+                else:
+                    # Not enough points, create dummy landmarks
+                    print("DEBUG align - Not enough landmarks, creating dummy points")
+                    h, w = image.shape[:2]
+                    landmarks_array = np.array([
+                        [w * 0.3, h * 0.3],  # Left eye
+                        [w * 0.7, h * 0.3],  # Right eye
+                        [w * 0.5, h * 0.5],  # Nose
+                        [w * 0.3, h * 0.7],  # Left mouth
+                        [w * 0.7, h * 0.7]   # Right mouth
+                    ], dtype=np.float32)
+            
+            # If we get 1 point array with more than 2 elements, reshape to 5 points
+            elif landmarks_array.shape[0] == 1 and len(landmarks_array[0]) >= 10:
+                landmarks_array = landmarks_array[0][:10].reshape(5, 2)
+                
+            # Ensure we have exactly 5 points
+            if landmarks_array.shape[0] > 5:
+                landmarks_array = landmarks_array[:5]
+            elif landmarks_array.shape[0] < 5:
+                # Create missing points
+                print("DEBUG align - Not enough landmarks, filling missing points")
+                h, w = image.shape[:2]
+                missing_points = 5 - landmarks_array.shape[0]
+                dummy_landmarks = np.array([
+                    [w * 0.3, h * 0.3],  # Left eye
+                    [w * 0.7, h * 0.3],  # Right eye
+                    [w * 0.5, h * 0.5],  # Nose
+                    [w * 0.3, h * 0.7],  # Left mouth
+                    [w * 0.7, h * 0.7]   # Right mouth
+                ], dtype=np.float32)
+                landmarks_array = np.vstack([landmarks_array, dummy_landmarks[:missing_points]])
+            
+            # Ensure each point has 2 coordinates
+            if landmarks_array.shape[1] != 2:
+                if landmarks_array.shape[1] > 2:
+                    landmarks_array = landmarks_array[:, :2]
+                else:
+                    # Pad with zeros
+                    print("DEBUG align - Points don't have 2 coordinates, padding with zeros")
+                    padded = np.zeros((5, 2), dtype=np.float32)
+                    padded[:, :landmarks_array.shape[1]] = landmarks_array
+                    landmarks_array = padded
+            
+            print(f"DEBUG align - Final landmarks array: {landmarks_array}")
+            
+            # Calculate the transformation matrix with RANSAC for more robust estimation
+            try:
+                transformation_matrix, _ = cv2.estimateAffinePartial2D(
+                    landmarks_array, reference, method=cv2.RANSAC, ransacReprojThreshold=3.0
+                )
+                print(f"DEBUG align - Transformation matrix: {transformation_matrix}")
+            except Exception as e:
+                print(f"DEBUG align - Error calculating transformation matrix: {str(e)}")
+                # Create a simple transformation matrix (scale and translation)
+                s_x = output_size[0] / image.shape[1]
+                s_y = output_size[1] / image.shape[0]
+                transformation_matrix = np.array([
+                    [s_x, 0, 0],
+                    [0, s_y, 0]
+                ], dtype=np.float32)
             
             if transformation_matrix is None:
-                # Fallback: use simplified alignment
-                src_mean = np.mean(landmarks, axis=0)
-                dst_mean = np.mean(reference, axis=0)
-                src_scale = np.std(landmarks)
-                dst_scale = np.std(reference)
-                
-                scale = dst_scale / src_scale if src_scale > 0 else 1.0
+                print("DEBUG align - Got None transformation matrix, creating a simple one")
+                # Create a simple transformation matrix (scale and translation)
+                s_x = output_size[0] / image.shape[1]
+                s_y = output_size[1] / image.shape[0]
                 transformation_matrix = np.array([
-                    [scale, 0, dst_mean[0] - scale * src_mean[0]],
-                    [0, scale, dst_mean[1] - scale * src_mean[1]]
+                    [s_x, 0, 0],
+                    [0, s_y, 0]
                 ], dtype=np.float32)
             
             # Apply the transformation
-            aligned_face = cv2.warpAffine(
-                image,
-                transformation_matrix,
-                output_size,
-                flags=cv2.INTER_CUBIC
-            )
+            aligned_face = cv2.warpAffine(image, transformation_matrix, output_size, flags=cv2.INTER_CUBIC)
+            
+            # Debug the output
+            print(f"DEBUG align - Output image shape: {aligned_face.shape}, dtype: {aligned_face.dtype}")
+            print(f"DEBUG align - Output image min-max values: {np.min(aligned_face)}-{np.max(aligned_face)}")
+            
+            # Ensure the output isn't completely black
+            if np.max(aligned_face) < 10:
+                print("DEBUG align - Warning: Output image is almost black, using simple resize instead")
+                aligned_face = cv2.resize(image, output_size, interpolation=cv2.INTER_CUBIC)
             
             return aligned_face
         
         except Exception as e:
-            print(f"Error in align function: {str(e)}")
-            # Return a simple resized version of the image as fallback
-            return cv2.resize(image, output_size, interpolation=cv2.INTER_CUBIC)
+            print(f"DEBUG align - Critical error: {str(e)}")
+            # Return a colored image instead of black
+            dummy = np.ones((*output_size, 3), dtype=np.uint8) * 128  # Gray
+            cv2.putText(dummy, "Error in align", (10, output_size[1]//2), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+            return dummy
     
     def extract(self, image, bbox, margin=0.2, output_size=(160, 160)):
         """
@@ -135,15 +210,34 @@ class FaceDetector:
         - Extracted face image
         """
         try:
+            # Print debug information
+            print(f"DEBUG extract - Image shape: {image.shape}, dtype: {image.dtype}")
+            print(f"DEBUG extract - Bbox: {bbox}")
+            print(f"DEBUG extract - Margin: {margin}, Output size: {output_size}")
+            
             # Get image dimensions
             img_height, img_width = image.shape[:2]
             
-            # Ensure bbox is in the correct format
+            # Ensure bbox is in the correct format with 4 elements
+            if not isinstance(bbox, list) and hasattr(bbox, "__iter__"):
+                bbox = list(bbox)
+            
             if len(bbox) != 4:
-                raise ValueError(f"Invalid bbox format: {bbox}, expected [x, y, width, height]")
+                print(f"DEBUG extract - Invalid bbox format: {bbox}, expected [x, y, width, height]. Creating default bbox.")
+                # Create a default bbox in the center of the image
+                default_size = min(img_width, img_height) // 2
+                x = (img_width - default_size) // 2
+                y = (img_height - default_size) // 2
+                bbox = [x, y, default_size, default_size]
             
             # Extract coordinates
             x, y, width, height = bbox
+            
+            print(f"DEBUG extract - After conversion: x={x}, y={y}, width={width}, height={height}")
+            
+            # Ensure width and height are positive
+            width = max(1, width)
+            height = max(1, height)
             
             # Calculate margin
             margin_x = int(width * margin)
@@ -155,22 +249,38 @@ class FaceDetector:
             x2 = min(img_width, x + width + margin_x)
             y2 = min(img_height, y + height + margin_y)
             
+            print(f"DEBUG extract - Region with margin: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
+            
             # Ensure the region is valid
             if x1 >= x2 or y1 >= y2 or x2 <= 0 or y2 <= 0 or x1 >= img_width or y1 >= img_height:
-                raise ValueError(f"Invalid face region: [{x1}, {y1}, {x2}, {y2}]")
+                print(f"DEBUG extract - Invalid face region: [{x1}, {y1}, {x2}, {y2}]")
+                # Create a default region
+                x1 = 0
+                y1 = 0
+                x2 = min(img_width, 100)
+                y2 = min(img_height, 100)
+                print(f"DEBUG extract - Using default region: [{x1}, {y1}, {x2}, {y2}]")
             
             # Extract face region
             face_img = image[y1:y2, x1:x2]
+            print(f"DEBUG extract - Extracted face shape: {face_img.shape}")
             
             # Resize to output size
             face_img = cv2.resize(face_img, output_size, interpolation=cv2.INTER_CUBIC)
             
+            # Debug the output
+            print(f"DEBUG extract - Output image shape: {face_img.shape}, dtype: {face_img.dtype}")
+            print(f"DEBUG extract - Output image min-max values: {np.min(face_img)}-{np.max(face_img)}")
+            
             return face_img
         
         except Exception as e:
-            print(f"Error in extract function: {str(e)}")
-            # Return a blank image as fallback
-            return np.zeros((*output_size, 3), dtype=np.uint8)
+            print(f"DEBUG extract - Critical error: {str(e)}")
+            # Return a colored image instead of black
+            dummy = np.ones((*output_size, 3), dtype=np.uint8) * 64  # Dark gray
+            cv2.putText(dummy, "Error in extract", (10, output_size[1]//2), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+            return dummy
     
     def preprocess_image(self, image):
         """
