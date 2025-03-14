@@ -2,6 +2,12 @@ FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
 WORKDIR /app
 
+# ติดตั้งแพคเกจที่จำเป็นสำหรับ OpenCV
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install required packages
 RUN pip install --no-cache-dir fastapi \
     uvicorn \
