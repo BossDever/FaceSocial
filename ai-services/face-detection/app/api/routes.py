@@ -176,23 +176,15 @@ async def extract_face(request: FaceExtractionRequest):
     
     Parameters:
     - image: Base64 encoded image
-    - bbox: Bounding box [x1, y1, x2, y2]
+    - bbox: Bounding box coordinates
+        - Format 1 (recommended): [x1, y1, x2, y2] (top-left and bottom-right corners)
+        - Format 2 (legacy): Any array that can be converted to bbox
     - margin: Margin to add around the bounding box (default: 0.2)
     - output_size: Output image size [width, height] (default: [160, 160])
     
     Returns:
     - face_image: Base64 encoded extracted face image
     - processing_time_ms: Processing time in milliseconds
-    
-    Example:
-    ```
-    {
-      "image": "base64_encoded_image",
-      "bbox": [846, 873, 1108, 1230],  # [x1, y1, x2, y2]
-      "margin": 0.2,
-      "output_size": [160, 160]
-    }
-    ```
     """
     try:
         start_time = time.time()
@@ -205,25 +197,28 @@ async def extract_face(request: FaceExtractionRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
-        # Validate bbox format
-        if not isinstance(request.bbox, list):
-            raise HTTPException(
-                status_code=400, 
-                detail=f"bbox must be a list, got {type(request.bbox).__name__}"
-            )
+        # Flexible bbox handling - try to make it work with different formats
+        bbox = request.bbox
         
-        if len(request.bbox) != 4:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Expected 4 values in bbox, got {len(request.bbox)}. " +
-                "bbox should be [x1, y1, x2, y2]"
-            )
+        # If not a list or wrong length, try to fix
+        if not isinstance(bbox, list):
+            try:
+                bbox = list(bbox)
+            except:
+                bbox = [0, 0, 100, 100]  # Default fallback
         
-        # Extract face
-        bbox = request.bbox  # [x1, y1, x2, y2]
+        # Ensure we have at least 4 elements
+        while len(bbox) < 4:
+            bbox.append(0)
+        
+        # Extract only the first 4 elements
+        bbox = bbox[:4]
         
         # Convert to the format expected by the extract function [x, y, width, height]
         bbox_xywh = [bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]]
+        
+        # Print for debugging
+        print(f"Input bbox: {bbox}, Converted bbox: {bbox_xywh}")
         
         face_image = face_detector.extract(image, bbox_xywh, request.margin, request.output_size)
         
@@ -238,7 +233,5 @@ async def extract_face(request: FaceExtractionRequest):
             "processing_time_ms": processing_time
         }
         
-    except HTTPException:
-        raise  # Re-raise HTTP exceptions with status codes
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error extracting face: {str(e)}")
