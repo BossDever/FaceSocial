@@ -110,8 +110,15 @@ async def align_face(request: FaceAlignmentRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
-        # Convert landmarks to the format expected by the align function
-        landmarks = np.array(request.landmarks)
+        # Validate landmarks
+        if len(request.landmarks) != 5:
+            raise HTTPException(status_code=400, detail=f"Expected 5 landmarks, got {len(request.landmarks)}")
+        
+        # Convert landmarks to numpy array
+        landmarks = np.array(request.landmarks, dtype=np.float32)
+        
+        # Log for debugging
+        print(f"Input landmarks: {landmarks}")
         
         # Align face
         aligned_face = face_detector.align(image, landmarks, request.output_size)
@@ -156,11 +163,18 @@ async def extract_face(request: FaceExtractionRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
+        # Validate bbox
+        if len(request.bbox) != 4:
+            raise HTTPException(status_code=400, detail=f"Expected 4 values in bbox, got {len(request.bbox)}")
+        
         # Extract face
         bbox = request.bbox  # [x1, y1, x2, y2]
         
         # Convert to the format expected by the extract function [x, y, width, height]
         bbox_xywh = [bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]]
+        
+        # Log for debugging
+        print(f"Input bbox: {request.bbox}, Converted bbox: {bbox_xywh}")
         
         face_image = face_detector.extract(image, bbox_xywh, request.margin, request.output_size)
         
