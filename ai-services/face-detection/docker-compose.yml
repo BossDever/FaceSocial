@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  face-detection:
+    build:
+      context: ./face-detection
+      dockerfile: Dockerfile
+    volumes:
+      - ./face-detection:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    working_dir: /app  # เพิ่มบรรทัดนี้เพื่อกำหนด working directory
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload

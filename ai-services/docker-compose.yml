@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  face-detection:
+    image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
+    volumes:
+      - ./ai-services/face-detection:/app
+      - ./ai-services/shared:/app/shared
+      - ./shared-volume:/shared-volume
+    environment:
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  face-recognition:
+    image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
+    volumes:
+      - ./ai-services/face-recognition:/app
+      - ./ai-services/shared:/app/shared
+      - ./shared-volume:/shared-volume
+    environment:
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  deepfake-detection:
+    image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
+    volumes:
+      - ./ai-services/deepfake-detection:/app
+      - ./ai-services/shared:/app/shared
+      - ./shared-volume:/shared-volume
+    environment:
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
+    ports:
+      - "8002:8002"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  milvus:
+    image: milvusdb/milvus:v2.3.4
+    volumes:
+      - ./milvus/data:/var/lib/milvus/data
+      - ./milvus/conf:/var/lib/milvus/conf
+      - ./milvus/logs:/var/lib/milvus/logs
+    ports:
+      - "19530:19530"
+      - "19121:19121"
+    environment:
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    command: ["milvus", "run", "standalone"]
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/data:/data
