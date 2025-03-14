@@ -98,6 +98,21 @@ async def align_face(request: FaceAlignmentRequest):
     Returns:
     - aligned_face: Base64 encoded aligned face image
     - processing_time_ms: Processing time in milliseconds
+    
+    Example:
+    ```
+    {
+      "image": "base64_encoded_image",
+      "landmarks": [
+        [936, 1095],  # Left eye
+        [1005, 1149], # Right eye
+        [1019, 1024], # Nose
+        [902, 1021],  # Left mouth corner
+        [904, 1145]   # Right mouth corner
+      ],
+      "output_size": [160, 160]
+    }
+    ```
     """
     try:
         start_time = time.time()
@@ -110,15 +125,29 @@ async def align_face(request: FaceAlignmentRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
-        # Validate landmarks
+        # Validate landmarks format
+        if not isinstance(request.landmarks, list):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"landmarks must be a list, got {type(request.landmarks).__name__}"
+            )
+        
         if len(request.landmarks) != 5:
-            raise HTTPException(status_code=400, detail=f"Expected 5 landmarks, got {len(request.landmarks)}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Expected 5 landmarks, got {len(request.landmarks)}. " +
+                "Landmarks should be 5 points: [left_eye, right_eye, nose, left_mouth, right_mouth]"
+            )
+        
+        for i, point in enumerate(request.landmarks):
+            if not isinstance(point, list) or len(point) != 2:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Landmark point {i} should be a list of 2 coordinates [x, y], got {point}"
+                )
         
         # Convert landmarks to numpy array
         landmarks = np.array(request.landmarks, dtype=np.float32)
-        
-        # Log for debugging
-        print(f"Input landmarks: {landmarks}")
         
         # Align face
         aligned_face = face_detector.align(image, landmarks, request.output_size)
@@ -134,6 +163,8 @@ async def align_face(request: FaceAlignmentRequest):
             "processing_time_ms": processing_time
         }
         
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions with status codes
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error aligning face: {str(e)}")
 
