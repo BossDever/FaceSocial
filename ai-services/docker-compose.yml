@@ -2,16 +2,15 @@ version: '3.8'
 
 services:
   face-detection:
-    image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
+    build:
+      context: ./face-detection
+      dockerfile: Dockerfile
     volumes:
-      - ./ai-services/face-detection:/app
-      - ./ai-services/shared:/app/shared
-      - ./shared-volume:/shared-volume
-    environment:
-      - TF_FORCE_GPU_ALLOW_GROWTH=true
-    command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+      - ./face-detection:/app
     ports:
       - "8000:8000"
+    environment:
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
     deploy:
       resources:
         reservations:
@@ -19,13 +18,13 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    working_dir: /app
+    command: bash -c "cd /app && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   face-recognition:
     image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
     volumes:
-      - ./ai-services/face-recognition:/app
-      - ./ai-services/shared:/app/shared
-      - ./shared-volume:/shared-volume
+      - ./face-recognition:/app
     environment:
       - TF_FORCE_GPU_ALLOW_GROWTH=true
     command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
@@ -42,9 +41,7 @@ services:
   deepfake-detection:
     image: nvcr.io/nvidia/tensorflow:24.05-tf2-py3
     volumes:
-      - ./ai-services/deepfake-detection:/app
-      - ./ai-services/shared:/app/shared
-      - ./shared-volume:/shared-volume
+      - ./deepfake-detection:/app
     environment:
       - TF_FORCE_GPU_ALLOW_GROWTH=true
     command: bash -c "pip install fastapi uvicorn && python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
