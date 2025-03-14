@@ -58,60 +58,68 @@ class FaceDetector:
     def align(self, image, landmarks, output_size=(160, 160)):
         """
         Align face based on facial landmarks.
-    
+        
         Parameters:
         - image: Input image
-    - landmarks: 5 point landmarks (left eye, right eye, nose, left mouth, right mouth)
-    - output_size: Size of the output image
-    
-    Returns:
-    - Aligned face image
-    """
-    try:
-        # Define reference points for alignment
-        # These reference points correspond to FaceNet's expected 5 points
-        # [left_eye, right_eye, nose, left_mouth, right_mouth]
-        reference = np.array([
-            [30.2946, 51.6963],  # Left eye
-            [65.5318, 51.6963],  # Right eye
-            [48.0252, 71.7366],  # Nose
-            [33.5493, 92.3655],  # Left mouth corner
-            [62.7299, 92.3655]   # Right mouth corner
-        ], dtype=np.float32)
+        - landmarks: 5 point landmarks (left eye, right eye, nose, left mouth, right mouth)
+        - output_size: Size of the output image
         
-        # Scale reference points to match the output size
-        reference[:, 0] *= output_size[0] / 96.0
-        reference[:, 1] *= output_size[1] / 96.0
-        
-        # Ensure landmarks have the correct format
-        landmarks = np.array(landmarks, dtype=np.float32)
-        
-        # Calculate the transformation matrix with full=False for more robust estimation
-        transformation_matrix, _ = cv2.estimateAffinePartial2D(landmarks, reference, method=cv2.RANSAC)
-        
-        if transformation_matrix is None:
-            # Fallback: use simplified alignment (just translation and scaling)
-            src_mean = np.mean(landmarks, axis=0)
-            dst_mean = np.mean(reference, axis=0)
-            src_scale = np.std(landmarks)
-            dst_scale = np.std(reference)
-            
-            scale = dst_scale / src_scale if src_scale > 0 else 1.0
-            
-            transformation_matrix = np.array([
-                [scale, 0, dst_mean[0] - scale * src_mean[0]],
-                [0, scale, dst_mean[1] - scale * src_mean[1]]
+        Returns:
+        - Aligned face image
+        """
+        try:
+            # Define reference points for alignment
+            # These reference points correspond to FaceNet's expected 5 points:
+            # [left_eye, right_eye, nose, left_mouth, right_mouth]
+            reference = np.array([
+                [30.2946, 51.6963],  # Left eye
+                [65.5318, 51.6963],  # Right eye
+                [48.0252, 71.7366],  # Nose
+                [33.5493, 92.3655],  # Left mouth corner
+                [62.7299, 92.3655]   # Right mouth corner
             ], dtype=np.float32)
+            
+            # Scale reference points to match the output size
+            reference[:, 0] *= output_size[0] / 96.0
+            reference[:, 1] *= output_size[1] / 96.0
+            
+            # Ensure landmarks have the correct format
+            landmarks = np.array(landmarks, dtype=np.float32)
+            
+            # Calculate the transformation matrix
+            transformation_matrix, _ = cv2.estimateAffinePartial2D(
+                landmarks,
+                reference,
+                method=cv2.RANSAC
+            )
+            
+            if transformation_matrix is None:
+                # Fallback: use simplified alignment
+                src_mean = np.mean(landmarks, axis=0)
+                dst_mean = np.mean(reference, axis=0)
+                src_scale = np.std(landmarks)
+                dst_scale = np.std(reference)
+                
+                scale = dst_scale / src_scale if src_scale > 0 else 1.0
+                transformation_matrix = np.array([
+                    [scale, 0, dst_mean[0] - scale * src_mean[0]],
+                    [0, scale, dst_mean[1] - scale * src_mean[1]]
+                ], dtype=np.float32)
+            
+            # Apply the transformation
+            aligned_face = cv2.warpAffine(
+                image,
+                transformation_matrix,
+                output_size,
+                flags=cv2.INTER_CUBIC
+            )
+            
+            return aligned_face
         
-        # Apply the transformation
-        aligned_face = cv2.warpAffine(image, transformation_matrix, output_size, flags=cv2.INTER_CUBIC)
-        
-        return aligned_face
-    
-    except Exception as e:
-        print(f"Error in align function: {str(e)}")
-        # Return a simple resized version of the image as fallback
-        return cv2.resize(image, output_size, interpolation=cv2.INTER_CUBIC)
+        except Exception as e:
+            print(f"Error in align function: {str(e)}")
+            # Return a simple resized version of the image as fallback
+            return cv2.resize(image, output_size, interpolation=cv2.INTER_CUBIC)
     
     def extract(self, image, bbox, margin=0.2, output_size=(160, 160)):
         """
@@ -130,7 +138,7 @@ class FaceDetector:
             # Get image dimensions
             img_height, img_width = image.shape[:2]
             
-            # Ensure bbox is in the correct format with 4 elements
+            # Ensure bbox is in the correct format
             if len(bbox) != 4:
                 raise ValueError(f"Invalid bbox format: {bbox}, expected [x, y, width, height]")
             
