@@ -55,9 +55,9 @@ class FaceDetector:
         
         return filtered_faces
     
-    def align(self, image, landmarks, output_size=(160, 160)):
+     def align(self, image, landmarks, output_size=(160, 160)):
     """
-    Align face based on facial landmarks.
+     Align face based on facial landmarks.
     
     Parameters:
     - image: Input image
