@@ -61,37 +61,59 @@ class FaceDetector:
         
         Parameters:
         - image: Input image
-        - landmarks: 5 point landmarks (left eye, right eye, nose, left mouth, right mouth)
+        - landmarks: List of 5 facial landmarks (eyes, nose, mouth corners)
         - output_size: Size of the output image
         
         Returns:
         - Aligned face image
         """
-        # Define reference points for alignment
-        # These reference points correspond to FaceNet's expected 5 points
-        # [left_eye, right_eye, nose, left_mouth, right_mouth]
-        reference = np.array([
-            [30.2946, 51.6963],  # Left eye
-            [65.5318, 51.6963],  # Right eye
-            [48.0252, 71.7366],  # Nose
-            [33.5493, 92.3655],  # Left mouth corner
-            [62.7299, 92.3655]   # Right mouth corner
-        ], dtype=np.float32)
+        try:
+            # Define reference points for alignment
+            # These reference points correspond to FaceNet's expected 5 points
+            # [left_eye, right_eye, nose, left_mouth, right_mouth]
+            reference = np.array([
+                [30.2946, 51.6963],  # Left eye
+                [65.5318, 51.6963],  # Right eye
+                [48.0252, 71.7366],  # Nose
+                [33.5493, 92.3655],  # Left mouth corner
+                [62.7299, 92.3655]   # Right mouth corner
+            ], dtype=np.float32)
+            
+            # Scale reference points to match the output size
+            reference[:, 0] *= output_size[0] / 96.0
+            reference[:, 1] *= output_size[1] / 96.0
+            
+            # Ensure landmarks have the correct shape (5, 2)
+            landmarks_array = np.array(landmarks, dtype=np.float32)
+            
+            # Debug information
+            print(f"Landmarks shape: {landmarks_array.shape}")
+            print(f"Reference shape: {reference.shape}")
+            
+            # Reshape landmarks if needed
+            if landmarks_array.shape != (5, 2):
+                if len(landmarks_array) >= 5:
+                    # Take only the first 5 landmarks
+                    landmarks_array = landmarks_array[:5]
+                else:
+                    # Not enough landmarks
+                    raise ValueError(f"Not enough landmarks: {len(landmarks_array)}, need 5")
+            
+            # Calculate the transformation matrix
+            transformation_matrix, _ = cv2.estimateAffinePartial2D(landmarks_array, reference)
+            
+            if transformation_matrix is None:
+                raise ValueError("Could not calculate transformation matrix")
+            
+            # Apply the transformation
+            aligned_face = cv2.warpAffine(image, transformation_matrix, output_size, flags=cv2.INTER_CUBIC)
+            
+            return aligned_face
         
-        # Scale reference points to match the output size
-        reference[:, 0] *= output_size[0] / 96.0
-        reference[:, 1] *= output_size[1] / 96.0
-        
-        # Convert landmarks to float32
-        landmarks = landmarks.astype(np.float32)
-        
-        # Calculate the transformation matrix
-        transformation_matrix = cv2.estimateAffinePartial2D(landmarks, reference)[0]
-        
-        # Apply the transformation
-        aligned_face = cv2.warpAffine(image, transformation_matrix, output_size, flags=cv2.INTER_CUBIC)
-        
-        return aligned_face
+        except Exception as e:
+            print(f"Error in align function: {str(e)}")
+            # Return a simple resized version of the image as fallback
+            return cv2.resize(image, output_size, interpolation=cv2.INTER_CUBIC)
     
     def extract(self, image, bbox, margin=0.2, output_size=(160, 160)):
         """
@@ -106,29 +128,43 @@ class FaceDetector:
         Returns:
         - Extracted face image
         """
-        # Get image dimensions
-        img_height, img_width = image.shape[:2]
+        try:
+            # Get image dimensions
+            img_height, img_width = image.shape[:2]
+            
+            # Ensure bbox is in the correct format with 4 elements
+            if len(bbox) != 4:
+                raise ValueError(f"Invalid bbox format: {bbox}, expected [x, y, width, height]")
+            
+            # Extract coordinates
+            x, y, width, height = bbox
+            
+            # Calculate margin
+            margin_x = int(width * margin)
+            margin_y = int(height * margin)
+            
+            # Calculate coordinates with margin
+            x1 = max(0, x - margin_x)
+            y1 = max(0, y - margin_y)
+            x2 = min(img_width, x + width + margin_x)
+            y2 = min(img_height, y + height + margin_y)
+            
+            # Ensure the region is valid
+            if x1 >= x2 or y1 >= y2 or x2 <= 0 or y2 <= 0 or x1 >= img_width or y1 >= img_height:
+                raise ValueError(f"Invalid face region: [{x1}, {y1}, {x2}, {y2}]")
+            
+            # Extract face region
+            face_img = image[y1:y2, x1:x2]
+            
+            # Resize to output size
+            face_img = cv2.resize(face_img, output_size, interpolation=cv2.INTER_CUBIC)
+            
+            return face_img
         
-        # Extract coordinates
-        x, y, width, height = bbox
-        
-        # Calculate margin
-        margin_x = int(width * margin)
-        margin_y = int(height * margin)
-        
-        # Calculate coordinates with margin
-        x1 = max(0, x - margin_x)
-        y1 = max(0, y - margin_y)
-        x2 = min(img_width, x + width + margin_x)
-        y2 = min(img_height, y + height + margin_y)
-        
-        # Extract face region
-        face_img = image[y1:y2, x1:x2]
-        
-        # Resize to output size
-        face_img = cv2.resize(face_img, output_size, interpolation=cv2.INTER_CUBIC)
-        
-        return face_img
+        except Exception as e:
+            print(f"Error in extract function: {str(e)}")
+            # Return a blank image as fallback
+            return np.zeros((*output_size, 3), dtype=np.uint8)
     
     def preprocess_image(self, image):
         """
