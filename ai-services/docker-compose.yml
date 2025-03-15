@@ -29,7 +29,7 @@ services:
       - "8001:8001"
     environment:
       - TF_FORCE_GPU_ALLOW_GROWTH=true
-      - MILVUS_HOST=milvus-lite
+      - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - FACENET_MODEL_PATH=/app/app/models/facenet/20180402-114759.pb
     deploy:
@@ -42,20 +42,45 @@ services:
     working_dir: /app
     command: bash -c "cd /app && python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
     depends_on:
-      - milvus-lite
+      - milvus
 
-  # Milvus Lite service - เวอร์ชันที่ง่ายกว่าและไม่ต้องการ etcd
-  milvus-lite:
-    image: milvusdb/milvus:v2.3.4-lite
-    container_name: milvus-lite
+  # Milvus standalone service
+  milvus:
+    image: milvusdb/milvus:v2.3.4
+    container_name: milvus
     volumes:
       - ./milvus/data:/var/lib/milvus/data
     ports:
       - "19530:19530"
       - "19121:19121"
     environment:
-      - MILVUS_STANDALONE_LITE=true
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
     command: ["milvus", "run", "standalone"]
+    depends_on:
+      - etcd
+      - minio
+
+  # etcd for Milvus metadata
+  etcd:
+    image: bitnami/etcd:latest
+    container_name: milvus-etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    volumes:
+      - ./milvus/etcd:/bitnami/etcd
+    
+  # MinIO for Milvus storage
+  minio:
+    image: minio/minio:latest
+    container_name: milvus-minio
+    volumes:
+      - ./milvus/minio:/data
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command: ["minio", "server", "/data"]
 
   redis:
     image: redis:latest
