@@ -1718,7 +1718,6 @@ async def models_status():
                 "dim": model_info.get("dim", "unknown"),
                 "path": model_info.get("path", "unknown")
             }
-    
     # Check weights
     weights = {}
     if hasattr(face_embedder, 'ensemble') and hasattr(face_embedder.ensemble, 'model_weights'):
@@ -1747,3 +1746,20 @@ async def models_status():
         "model_files_found": model_files,
         "onnx_providers": onnx_providers
     }
+
+@router.get("/system-status", tags=["system"])
+async def system_status():
+    """
+    Get comprehensive system status including model loading and GPU acceleration.
+    """
+    from app.utils.system_dashboard import get_system_status
+    return get_system_status()
+
+@router.get("/system-status/html", response_class=HTMLResponse, tags=["system"])
+async def system_status_html():
+    """
+    Get HTML report of system status.
+    """
+    from app.utils.system_dashboard import SystemDashboard
+    dashboard = SystemDashboard()
+    return dashboard.generate_html_report()
