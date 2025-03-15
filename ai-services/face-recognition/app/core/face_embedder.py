@@ -231,14 +231,19 @@ class FaceEmbedder:
         - Dictionary with ensemble embedding information
         """
         if self.use_ensemble:
-            return self.ensemble.generate_ensemble_embedding(face_image)
-        else:
-            # Fallback to standard embedding
-            embedding = self.generate_embedding(face_image)
-            return {
-                "model_embeddings": {"facenet": embedding},
-                "model_weights": {"facenet": 1.0}
-            }
+            try:
+                return self.ensemble.generate_ensemble_embedding(face_image)
+            except Exception as e:
+                print(f"Error in ensemble embedding: {str(e)}, falling back to FaceNet only")
+                # Fall back to FaceNet if ensemble fails
+        
+        # Fallback to standard embedding
+        embedding = self.generate_embedding(face_image)
+        print("Using FaceNet model only (no ensemble)")
+        return {
+            "model_embeddings": {"facenet": embedding},
+            "model_weights": {"facenet": 1.0}
+        }
     
     def calculate_ensemble_similarity(self, ensemble_emb1: Dict[str, Any], ensemble_emb2: Dict[str, Any]) -> float:
         """
