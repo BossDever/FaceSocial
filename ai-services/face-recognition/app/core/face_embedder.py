@@ -59,11 +59,39 @@ class FaceEmbedder:
         # Set the input shape required by the model
         self.input_shape = (160, 160)
         
-        # Initialize model ensemble
-        self.ensemble = ModelEnsemble('/app/models')
-        self.use_ensemble = len(self.ensemble.models) > 1  # Use ensemble if multiple models available
-        
+        # Initialize model ensemble with multiple possible paths
+        possible_model_paths = [
+            '/app/models',
+            '/app/app/models',
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models'),
+            os.path.dirname(model_path) if model_path else None,
+            '/home/suwit/FaceSocial/ai-services/face-recognition/app/models'
+        ]
+
+        # Filter out None values
+        possible_model_paths = [p for p in possible_model_paths if p]
+
+        # Try each path until we find models
+        self.ensemble = None
+        for path in possible_model_paths:
+            print(f"Trying to load ensemble models from: {path}")
+            try:
+                ensemble_instance = ModelEnsemble(path)
+                if len(ensemble_instance.models) > 0:
+                    self.ensemble = ensemble_instance
+                    print(f"Successfully loaded {len(ensemble_instance.models)} models from {path}")
+                    break
+            except Exception as e:
+                print(f"Error loading ensemble from {path}: {str(e)}")
+
+        if self.ensemble is None:
+            print("Could not load any ensemble models, creating empty ensemble")
+            self.ensemble = ModelEnsemble('/app/models')  # Fallback
+
+        self.use_ensemble = len(self.ensemble.models) > 0
         print(f"FaceEmbedder initialized with {'ensemble' if self.use_ensemble else 'single model'}")
+        if self.use_ensemble:
+            print(f"Using models: {list(self.ensemble.models.keys())}")
     
     def _load_frozen_graph(self, model_path):
         """
@@ -205,14 +233,19 @@ class FaceEmbedder:
         - Dictionary with ensemble embedding information
         """
         if self.use_ensemble:
-            return self.ensemble.generate_ensemble_embedding(face_image)
-        else:
-            # Fallback to standard embedding
-            embedding = self.generate_embedding(face_image)
-            return {
-                "model_embeddings": {"facenet": embedding},
-                "model_weights": {"facenet": 1.0}
-            }
+            try:
+                return self.ensemble.generate_ensemble_embedding(face_image)
+            except Exception as e:
+                print(f"Error in ensemble embedding: {str(e)}, falling back to FaceNet only")
+                # Fall back to FaceNet if ensemble fails
+        
+        # Fallback to standard embedding
+        embedding = self.generate_embedding(face_image)
+        print("Using FaceNet model only (no ensemble)")
+        return {
+            "model_embeddings": {"facenet": embedding},
+            "model_weights": {"facenet": 1.0}
+        }
     
     def calculate_ensemble_similarity(self, ensemble_emb1: Dict[str, Any], ensemble_emb2: Dict[str, Any]) -> float:
         """
