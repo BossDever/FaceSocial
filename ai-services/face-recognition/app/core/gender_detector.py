@@ -1,46 +1,62 @@
-# เพิ่มในไฟล์ app/core/gender_detector.py (สร้างไฟล์ใหม่)
 import cv2
 import numpy as np
-import tensorflow as tf
+from typing import Tuple, Optional
 import os
 
 class GenderDetector:
     """
-    A class for gender detection using a pre-trained model
+    Gender detector class to predict gender from face images
+    Uses a simple model or heuristics to determine gender
     """
+    
     def __init__(self):
-        self.model = None
-        self.load_model()
+        """
+        Initialize gender detector with pre-trained models if available
+        """
+        self.model_loaded = False
         
-    def load_model(self):
-        """Load gender detection model"""
-        try:
-            # พยายามโหลดโมเดล keras ที่ train ไว้สำหรับตรวจจับเพศ
-            model_path = '/app/app/models/gender/gender_model.h5'
-            if os.path.exists(model_path):
-                self.model = tf.keras.models.load_model(model_path)
-                print(f"Loaded gender detection model from {model_path}")
-            else:
-                # ถ้าไม่มีโมเดล ใช้โมเดลอย่างง่าย
-                self._create_simple_model()
-                print("Using simplified gender detection model")
-        except Exception as e:
-            print(f"Error loading gender model: {str(e)}")
-            self._create_simple_model()
+        # Try to load pre-trained caffe model for gender detection
+        model_dir = '/app/models/gender'
+        proto_paths = [
+            '/app/models/gender/gender_deploy.prototxt',
+            '/app/app/models/gender/gender_deploy.prototxt',
+            './app/models/gender/gender_deploy.prototxt'
+        ]
+        
+        model_paths = [
+            '/app/models/gender/gender_net.caffemodel',
+            '/app/app/models/gender/gender_net.caffemodel',
+            './app/models/gender/gender_net.caffemodel'
+        ]
+        
+        # Try to find prototxt and model files
+        proto_file = None
+        model_file = None
+        
+        for path in proto_paths:
+            if os.path.exists(path):
+                proto_file = path
+                break
+                
+        for path in model_paths:
+            if os.path.exists(path):
+                model_file = path
+                break
+        
+        # If both files found, load the model
+        if proto_file and model_file:
+            try:
+                print(f"Loading gender detection model from: {model_file}")
+                self.gender_net = cv2.dnn.readNet(proto_file, model_file)
+                self.model_loaded = True
+                print("Gender detection model loaded successfully")
+            except Exception as e:
+                print(f"Failed to load gender detection model: {str(e)}")
+                self.model_loaded = False
+        else:
+            print("Gender detection model files not found, will use fallback method")
             
-    def _create_simple_model(self):
-        """Create a simple gender detection CNN"""
-        inputs = tf.keras.Input(shape=(64, 64, 3))
-        x = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(inputs)
-        x = tf.keras.layers.MaxPooling2D((2, 2))(x)
-        x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
-        x = tf.keras.layers.MaxPooling2D((2, 2))(x)
-        x = tf.keras.layers.Flatten()(x)
-        x = tf.keras.layers.Dense(64, activation='relu')(x)
-        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
-        self.model = tf.keras.Model(inputs, outputs)
-        
-    def predict_gender(self, face_image):
+    def predict_gender(self, face_image: np.ndarray) -> Tuple[str, float]:
         """
         Predict gender from face image
         
@@ -50,80 +66,53 @@ class GenderDetector:
         Returns:
         - Tuple of (predicted_gender, confidence)
         """
-        if self.model is None:
-            # ถ้าไม่มีโมเดล ให้ใช้วิธีวิเคราะห์แบบเดิม (facial features)
-            return self._analyze_facial_features(face_image)
+        if face_image is None or face_image.size == 0:
+            return "unknown", 0.0
             
-        # Preprocess image
-        img = cv2.resize(face_image, (64, 64))
-        img = img / 255.0  # Normalize
-        img = np.expand_dims(img, axis=0)
-        
-        # Make prediction
-        try:
-            pred = self.model.predict(img, verbose=0)[0][0]
-            gender = 'male' if pred < 0.5 else 'female'
-            # Convert to confidence (0-1)
-            confidence = 1 - pred if pred < 0.5 else pred
-            return gender, float(confidence)
-        except Exception as e:
-            print(f"Error predicting gender: {str(e)}")
-            return self._analyze_facial_features(face_image)
-            
-    def _analyze_facial_features(self, face_image):
-        """
-        Analyze facial features for gender detection (fallback method)
-        """
-        try:
-            # ทำ preprocessing เพื่อให้จับลักษณะของใบหน้าได้ชัดเจนขึ้น
-            gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
-            gray = cv2.equalizeHist(gray)
-            
-            # ตัวแปรที่บ่งชี้เพศ
-            h, w = face_image.shape[:2]
-            aspect_ratio = w / h  # อัตราส่วนความกว้างต่อความสูง
-            
-            # ลองใช้ face landmark detector ถ้ามี
+        # Use pre-trained model if available
+        if self.model_loaded:
             try:
-                face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-                faces = face_detector.detectMultiScale(gray, 1.1, 4)
-                if len(faces) > 0:
-                    x, y, w, h = faces[0]
-                    face_area = face_image[y:y+h, x:x+w]
-                    # นับพิกเซลสีผิวในบริเวณขากรรไกร
-                    lower = np.array([0, 20, 70], dtype="uint8")
-                    upper = np.array([20, 100, 255], dtype="uint8")
-                    skin_mask = cv2.inRange(cv2.cvtColor(face_area, cv2.COLOR_BGR2HSV), lower, upper)
-                    skin_pixels = cv2.countNonZero(skin_mask)
-                    face_pixels = w * h
-                    skin_ratio = skin_pixels / face_pixels
-                    # ถ้ามีสัดส่วนพิกเซลสีผิวน้อยอาจเป็นเพราะมีหนวดเครา
-                    has_beard = skin_ratio < 0.4
-                    if has_beard:
-                        return 'male', 0.85
-            except:
-                pass
+                # Preprocess image for the model
+                blob = cv2.dnn.blobFromImage(face_image, 1.0, (227, 227),
+                                           (78.4263377603, 87.7689143744, 114.895847746),
+                                           swapRB=False)
                 
-            # คำนวณลักษณะอื่นๆ
-            # 1. คำนวณความแตกต่างของสี (ผู้ชายมักมีความเข้มของสีมากกว่า)
-            variance = np.var(gray)
+                # Predict gender
+                self.gender_net.setInput(blob)
+                gender_preds = self.gender_net.forward()
+                
+                # Get result
+                gender_idx = gender_preds[0].argmax()
+                confidence = gender_preds[0][gender_idx]
+                
+                gender = "male" if gender_idx == 1 else "female"
+                return gender, float(confidence)
+            except Exception as e:
+                print(f"Error in gender prediction with model: {str(e)}")
+                # Fall back to heuristic method
+        
+        # Fallback: Use simple facial features for gender estimation
+        try:
+            # Convert to grayscale
+            gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
             
-            # 2. ดูอัตราส่วนใบหน้า
-            face_ratio_score = 0.7 if aspect_ratio > 0.95 else 0.3
+            # Calculate face proportions
+            height, width = face_image.shape[:2]
+            aspect_ratio = width / height
             
-            # 3. คำนวณความเข้มของเฉดสี
-            intensity_score = 0.7 if variance > 2000 else 0.3
+            # Simple heuristics for demonstration
+            if aspect_ratio > 0.95:  # More square face shape (typically male)
+                gender = 'male'
+                confidence = 0.55 + (aspect_ratio - 0.95) / 0.5  # Adjust confidence based on ratio
+            else:  # More oval face shape (typically female)
+                gender = 'female'
+                confidence = 0.55 + (0.95 - aspect_ratio) / 0.5
             
-            # รวมคะแนน
-            male_score = (face_ratio_score + intensity_score) / 2
-            
-            # ตัดสินใจ
-            gender = 'male' if male_score > 0.5 else 'female'
-            confidence = male_score if gender == 'male' else (1 - male_score)
+            # Ensure confidence is between 0.5 and 0.85
+            confidence = min(max(confidence, 0.5), 0.85)
             
             return gender, confidence
             
         except Exception as e:
-            print(f"Error in facial feature analysis: {str(e)}")
-            # กรณีที่มีปัญหา ให้ตัดสินใจแบบไม่มั่นใจ
-            return 'unknown', 0.51
+            print(f"Error in fallback gender prediction: {str(e)}")
+            return "unknown", 0.0
