@@ -25,8 +25,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./face-recognition:/app
-      - /usr/lib/x86_64-linux-gnu/libcublas.so:/usr/lib/x86_64-linux-gnu/libcublas.so.11
-      - /usr/lib/x86_64-linux-gnu/libcublasLt.so:/usr/lib/x86_64-linux-gnu/libcublasLt.so.11
     ports:
       - "8001:8001"
     environment:
