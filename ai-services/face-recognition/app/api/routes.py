@@ -381,6 +381,213 @@ async def register_face(request: FaceRegistrationRequest):
     
     from fastapi.responses import HTMLResponse  # เพิ่มบรรทัดนี้ที่ด้านบนของไฟล์ ในส่วน imports
 
+# Helper function for image enhancement
+def improve_image_quality(image: np.ndarray) -> np.ndarray:
+    """
+    Improve image quality for better face recognition.
+    
+    Parameters:
+    - image: Input image
+    
+    Returns:
+    - Enhanced image
+    """
+    if image is None:
+        return None
+    
+    try:
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply histogram equalization to improve contrast
+        equalized = cv2.equalizeHist(gray)
+        
+        # Convert back to BGR
+        equalized_bgr = cv2.cvtColor(equalized, cv2.COLOR_GRAY2BGR)
+        
+        # Blend with original for more natural look (70% original, 30% equalized)
+        enhanced = cv2.addWeighted(image, 0.7, equalized_bgr, 0.3, 0)
+        
+        return enhanced
+    except Exception as e:
+        print(f"Error enhancing image: {str(e)}")
+        return image  # Return original if enhancement fails
+
+# Helper function to calculate confidence level
+def calculate_confidence_level(similarity: float, threshold: float, gender_warning: bool) -> str:
+    """
+    Calculate a human-readable confidence level based on similarity score.
+    
+    Parameters:
+    - similarity: Similarity score
+    - threshold: Threshold used
+    - gender_warning: Whether there was a gender mismatch warning
+    
+    Returns:
+    - Confidence level string
+    """
+    margin = similarity - threshold
+    
+    if gender_warning:
+        # Lower confidence if gender mismatch
+        if margin >= 0.1:
+            return "MEDIUM"
+        elif margin >= 0:
+            return "LOW"
+        else:
+            return "VERY LOW"
+    else:
+        # Normal confidence calculation
+        if margin >= 0.15:
+            return "VERY HIGH"
+        elif margin >= 0.08:
+            return "HIGH"
+        elif margin >= 0.03:
+            return "MEDIUM"
+        elif margin >= 0:
+            return "LOW"
+        else:
+            return "VERY LOW"
+
+@router.post("/smart-compare", response_model=Dict[str, Any])
+async def smart_compare_faces(request: dict):
+    """
+    Compare faces using smart adaptive comparison with multiple techniques.
+    
+    Parameters:
+    - query_face: Base64 encoded query face image
+    - reference_faces: List of base64 encoded reference face images
+    - threshold: Optional custom threshold (default: adaptive)
+    - top_n: Number of best matches to use (default: 3)
+    
+    Returns:
+    - Enhanced comparison results with detailed information
+    """
+    try:
+        start_time = time.time()
+        
+        # Validate request
+        if 'query_face' not in request or 'reference_faces' not in request:
+            raise HTTPException(status_code=400, detail="Must provide query_face and reference_faces")
+        
+        if not isinstance(request['reference_faces'], list) or len(request['reference_faces']) == 0:
+            raise HTTPException(status_code=400, detail="reference_faces must be a non-empty list")
+        
+        # Get parameters
+        top_n = request.get('top_n', 3)
+        custom_threshold = request.get('threshold', None)
+        
+        # Decode query face
+        query_base64 = request['query_face']
+        query_image_data = base64.b64decode(query_base64)
+        query_nparr = np.frombuffer(query_image_data, np.uint8)
+        query_image = cv2.imdecode(query_nparr, cv2.IMREAD_COLOR)
+        
+        if query_image is None:
+            raise HTTPException(status_code=400, detail="Invalid query image data")
+        
+        # Enhanced preprocessing for query image
+        query_image = improve_image_quality(query_image)
+        
+        # Generate embedding for query face
+        query_embedding = face_embedder.generate_embedding(query_image)
+        
+        # Process reference faces
+        reference_embeddings = []
+        reference_images = []
+        reference_qualities = []
+        
+        for ref_base64 in request['reference_faces']:
+            ref_image_data = base64.b64decode(ref_base64)
+            ref_nparr = np.frombuffer(ref_image_data, np.uint8)
+            ref_image = cv2.imdecode(ref_nparr, cv2.IMREAD_COLOR)
+            
+            if ref_image is not None:
+                # Enhance image
+                ref_image = improve_image_quality(ref_image)
+                
+                # Assess quality
+                quality_score = face_embedder.assess_quality(ref_image)
+                reference_qualities.append(quality_score)
+                
+                # Only use images with reasonable quality
+                if quality_score > 0.3:  # Very low quality threshold
+                    ref_embedding = face_embedder.generate_embedding(ref_image)
+                    reference_embeddings.append(ref_embedding)
+                    reference_images.append(ref_image)
+        
+        # Different comparison methods
+        result = {}
+        
+        # 1. Weighted Top-N Average (main method)
+        weighted_result = face_embedder.calculate_weighted_top_n_average_similarity(
+            query_embedding, 
+            reference_embeddings,
+            reference_images,
+            top_n=top_n
+        )
+        
+        # 2. Standard Top-N Average (backup)
+        top_n_similarity = face_embedder.calculate_top_n_average_similarity(
+            query_embedding, 
+            reference_embeddings,
+            top_n=top_n
+        )
+        
+        # 3. Maximum Similarity (for comparison)
+        max_similarity = face_embedder.calculate_similarity_with_multiple(
+            query_embedding, 
+            reference_embeddings
+        ) if reference_embeddings else 0.0
+        
+        # Determine threshold (adaptive or custom)
+        threshold = custom_threshold
+        if threshold is None:
+            threshold = face_embedder.adaptive_threshold(
+                len(reference_embeddings),
+                reference_qualities
+            )
+        
+        # Make final determination
+        is_same_person = weighted_result["similarity"] >= threshold
+        
+        # Check for gender mismatch as a warning flag
+        gender_warning = False
+        if weighted_result["gender_match"] is not None and weighted_result["gender_match"] is False:
+            gender_warning = True
+            # If strong gender mismatch and similarity is borderline, adjust decision
+            if weighted_result["similarity"] < (threshold + 0.05):
+                is_same_person = False
+        
+        processing_time = (time.time() - start_time) * 1000  # Convert to ms
+        
+        # Prepare detailed response
+        response = {
+            "primary_similarity": weighted_result["similarity"],
+            "is_same_person": is_same_person,
+            "threshold_used": threshold,
+            "processing_time_ms": processing_time,
+            "reference_count": len(reference_embeddings),
+            "details": {
+                "top_n_similarity": top_n_similarity,
+                "max_similarity": max_similarity,
+                "top_similarities": weighted_result["top_similarities"],
+                "quality_scores": reference_qualities,
+                "gender_warning": gender_warning,
+                "adaptive_threshold": threshold if custom_threshold is None else None
+            },
+            "confidence_level": calculate_confidence_level(
+                weighted_result["similarity"], 
+                threshold,
+                gender_warning
+            )
+        }
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in smart comparison: {str(e)}")
+
 # เพิ่ม endpoint นี้ที่ด้านล่างของไฟล์ (ต่อจาก endpoint อื่นๆ)
 @router.get("/demo")
 async def face_recognition_demo():
@@ -947,6 +1154,13 @@ async def face_recognition_demo_multiple():
             .similarity-high { color: green; font-weight: bold; }
             .similarity-med { color: orange; }
             .similarity-low { color: red; }
+            .details-section { margin-top: 15px; padding: 10px; background: #f8f8f8; border-radius: 5px; }
+            .warning { color: #e74c3c; }
+            .confidence-veryhigh { color: #2ecc71; font-weight: bold; }
+            .confidence-high { color: #27ae60; font-weight: bold; }
+            .confidence-medium { color: #f39c12; }
+            .confidence-low { color: #e67e22; }
+            .confidence-verylow { color: #e74c3c; }
         </style>
     </head>
     <body>
@@ -976,6 +1190,7 @@ async def face_recognition_demo_multiple():
                     <option value="max">Maximum Similarity (Best Match)</option>
                     <option value="average">Average Similarity</option>
                     <option value="top_n">Top-N Average (N=3)</option>
+                    <option value="smart">Smart Adaptive Comparison</option>
                 </select>
                 <br>
                 <button onclick="compareWithMultiple()">Compare Face</button>
@@ -1085,6 +1300,13 @@ async def face_recognition_demo_multiple():
                 logElement.innerHTML += `[${timestamp}] ${message}<br>`;
                 logElement.scrollTop = logElement.scrollHeight;
             }
+
+            // Get similarity class based on value
+            function getSimilarityClass(similarity) {
+                if (similarity >= 0.85) return 'similarity-high';
+                if (similarity >= 0.75) return 'similarity-med';
+                return 'similarity-low';
+            }
             
             // Compare with multiple faces
             async function compareWithMultiple() {
@@ -1119,6 +1341,9 @@ async def face_recognition_demo_multiple():
                         if (method === 'top_n') {
                             apiEndpoint = '/v1/face/compare-top-n';
                             requestBody.top_n = 3;  // Default to top 3 matches
+                        } else if (method === 'smart') {
+                            apiEndpoint = '/v1/face/smart-compare';
+                            requestBody.top_n = 3;  // Default to top 3 matches
                         } else {
                             requestBody.method = method;
                         }
@@ -1136,31 +1361,48 @@ async def face_recognition_demo_multiple():
                         }
                         
                         const data = await response.json();
-                        log(`Comparison complete: similarity = ${data.similarity.toFixed(4)}`);
                         
-                        // Determine similarity class for styling
-                        let similarityClass = 'similarity-low';
-                        if (data.similarity >= 0.85) {
-                            similarityClass = 'similarity-high';
-                        } else if (data.similarity >= 0.75) {
-                            similarityClass = 'similarity-med';
+                        // Process and display results based on method
+                        if (method === 'smart') {
+                            log(`Comparison complete: similarity = ${data.primary_similarity.toFixed(4)}`);
+                            
+                            document.getElementById('comparison-result').innerHTML = `
+                                <p><strong>Similarity Score:</strong> <span class="${getSimilarityClass(data.primary_similarity)}">${data.primary_similarity.toFixed(4)}</span></p>
+                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
+                                <p><strong>Confidence Level:</strong> <span class="confidence-${data.confidence_level.toLowerCase()}">${data.confidence_level}</span></p>
+                                <p><strong>Threshold:</strong> ${data.threshold_used.toFixed(4)} (${data.details.adaptive_threshold ? 'Adaptive' : 'Fixed'})</p>
+                                <p><strong>Reference Images:</strong> ${data.reference_count}</p>
+                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                                ${data.details.gender_warning ? '<p class="warning"><strong>Warning:</strong> Possible gender mismatch detected</p>' : ''}
+                                <div class="details-section">
+                                    <h4>Additional Details</h4>
+                                    <p>Max Similarity: ${data.details.max_similarity.toFixed(4)}</p>
+                                    <p>Top-N Similarity: ${data.details.top_n_similarity.toFixed(4)}</p>
+                                    <p>Top Similarities: ${data.details.top_similarities.map(s => s.toFixed(4)).join(', ')}</p>
+                                </div>
+                            `;
+                        } else {
+                            log(`Comparison complete: similarity = ${data.similarity.toFixed(4)}`);
+                            
+                            // Determine similarity class for styling
+                            let similarityClass = getSimilarityClass(data.similarity);
+                            
+                            // Display method used in a user-friendly way
+                            let methodDisplay = "Unknown";
+                            if (method === 'max') methodDisplay = "Maximum Similarity";
+                            else if (method === 'average') methodDisplay = "Average Similarity";
+                            else if (method === 'top_n') methodDisplay = "Top-3 Average Similarity";
+                            
+                            // Display results
+                            document.getElementById('comparison-result').innerHTML = `
+                                <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
+                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
+                                <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
+                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                                <p><strong>Method Used:</strong> ${methodDisplay}</p>
+                                <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>
+                            `;
                         }
-                        
-                        // Display method used in a user-friendly way
-                        let methodDisplay = "Unknown";
-                        if (method === 'max') methodDisplay = "Maximum Similarity";
-                        else if (method === 'average') methodDisplay = "Average Similarity";
-                        else if (method === 'top_n') methodDisplay = "Top-3 Average Similarity";
-                        
-                        // Display results
-                        document.getElementById('comparison-result').innerHTML = `
-                            <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
-                            <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
-                            <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
-                            <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
-                            <p><strong>Method Used:</strong> ${methodDisplay}</p>
-                            <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>
-                        `;
                     };
                     
                     queryReader.readAsDataURL(queryFileInput.files[0]);
