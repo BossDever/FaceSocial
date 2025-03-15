@@ -64,13 +64,20 @@ services:
   # etcd for Milvus metadata
   etcd:
     image: bitnami/etcd:latest
-    container_name: milvus-etcd
     environment:
       - ALLOW_NONE_AUTHENTICATION=yes
       - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
     volumes:
       - ./milvus/etcd:/bitnami/etcd
-    
+    ports:
+      - "2379:2379"
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
   # MinIO for Milvus storage
   minio:
     image: minio/minio:latest
