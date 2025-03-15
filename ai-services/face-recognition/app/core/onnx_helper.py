@@ -266,7 +266,7 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
     print(f"Creating ONNX session for {model_path} with providers: {providers}")
     
     try:
-        # First try with GPU acceleration - FIX: corrected provider options format
+        # First try with GPU acceleration
         if 'CUDAExecutionProvider' in providers:
             try:
                 # Set execution provider options for better performance
@@ -281,10 +281,11 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
                 session_options = ort.SessionOptions()
                 session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
                 
-                # FIX: Correct format for provider options
+                # ONNX Runtime 1.17.0+ ใช้รูปแบบการกำหนด provider options แบบนี้
+                provider_with_options = [('CUDAExecutionProvider', provider_options)]
                 session = ort.InferenceSession(
                     model_path, 
-                    providers=[('CUDAExecutionProvider', provider_options), 'CPUExecutionProvider'],
+                    providers=provider_with_options + ['CPUExecutionProvider'],
                     sess_options=session_options
                 )
                 
