@@ -353,3 +353,158 @@ class FaceEmbedder:
             return sum(top_similarities) / len(top_similarities)
         else:
             return 0.0
+            
+    def estimate_gender(self, face_image: np.ndarray) -> Tuple[str, float]:
+        """
+        Estimate gender from face image.
+        
+        Parameters:
+        - face_image: Input face image
+        
+        Returns:
+        - Tuple of (predicted_gender, confidence)
+        """
+        # A simple gender estimation based on face features
+        # In a real-world system, you would use a dedicated gender classification model
+        # This is a placeholder implementation
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
+        
+        # Extract simple features
+        face_width = face_image.shape[1]
+        face_height = face_image.shape[0]
+        
+        # Calculate basic face proportions
+        ratio = face_width / face_height
+        
+        # Simple heuristics for demonstration
+        # This should be replaced with a proper gender classification model
+        if ratio > 0.95:  # More square face shape
+            gender = 'male'
+            confidence = 0.6 + (ratio - 0.95) / 0.5  # Adjust confidence based on ratio
+        else:  # More oval face shape
+            gender = 'female'
+            confidence = 0.6 + (0.95 - ratio) / 0.5
+        
+        # Ensure confidence is between 0.5 and 1.0
+        confidence = min(max(confidence, 0.5), 0.95)
+        
+        return gender, confidence
+
+    def calculate_weighted_top_n_average_similarity(self, embedding: np.ndarray, 
+                                                 target_embeddings: List[np.ndarray], 
+                                                 target_images: List[np.ndarray] = None,
+                                                 top_n: int = 3) -> Dict[str, Any]:
+        """
+        Calculate similarity using weighted Top-N Average method.
+        
+        Parameters:
+        - embedding: Face embedding to compare
+        - target_embeddings: List of target face embeddings
+        - target_images: Optional list of original face images for additional analysis
+        - top_n: Number of highest similarity embeddings to use for average
+        
+        Returns:
+        - Dictionary with similarity scores and additional information
+        """
+        if not target_embeddings:
+            return {
+                "similarity": 0.0,
+                "top_similarities": [],
+                "gender_match": None,
+                "quality_scores": []
+            }
+        
+        # Calculate similarity and quality for each target embedding
+        similarities = []
+        quality_scores = []
+        genders = []
+        
+        for i, target_emb in enumerate(target_embeddings):
+            # Calculate base similarity
+            sim = self.calculate_similarity(embedding, target_emb)
+            
+            # If we have the original images, perform additional analysis
+            quality = 0.8  # Default quality score
+            gender = None
+            
+            if target_images and i < len(target_images) and target_images[i] is not None:
+                # Assess image quality
+                quality = self.assess_quality(target_images[i])
+                
+                # Estimate gender
+                if quality > 0.4:  # Only estimate gender for reasonable quality images
+                    gender, _ = self.estimate_gender(target_images[i])
+                    genders.append(gender)
+                
+                # Apply quality-based weighting
+                # Higher quality images get slightly more weight
+                weighted_sim = sim * (0.8 + 0.2 * quality)
+            else:
+                weighted_sim = sim
+            
+            similarities.append((weighted_sim, sim, i))  # Store weighted_sim, original_sim, and index
+            quality_scores.append(quality)
+        
+        # Sort by weighted similarity (descending)
+        similarities.sort(reverse=True)
+        
+        # Extract top N
+        top_similarities = similarities[:min(top_n, len(similarities))]
+        
+        # Calculate average of top N (using original similarities, not weighted ones)
+        original_similarities = [item[1] for item in top_similarities]
+        avg_similarity = sum(original_similarities) / len(original_similarities) if original_similarities else 0.0
+        
+        # Determine if genders match
+        gender_match = None
+        if target_images and len(genders) > 0:
+            query_gender, _ = self.estimate_gender(target_images[0])  # Assuming first image is the query
+            gender_match = all(g == query_gender for g in genders) if genders else None
+        
+        return {
+            "similarity": avg_similarity,
+            "top_similarities": original_similarities,
+            "gender_match": gender_match,
+            "quality_scores": quality_scores
+        }
+
+    def adaptive_threshold(self, num_references: int, quality_scores: List[float]) -> float:
+        """
+        Calculate adaptive threshold based on the number of reference images and their quality.
+        
+        Parameters:
+        - num_references: Number of reference images
+        - quality_scores: List of quality scores for reference images
+        
+        Returns:
+        - Adaptive threshold value
+        """
+        # Base threshold
+        base_threshold = 0.63
+        
+        # Adjust based on number of references
+        if num_references < 3:
+            ref_adjustment = -0.05  # Lower threshold if few references
+        elif num_references > 7:
+            ref_adjustment = 0.02  # Raise threshold if many references
+        else:
+            ref_adjustment = 0.0
+        
+        # Adjust based on average quality
+        avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.7
+        if avg_quality < 0.5:
+            quality_adjustment = -0.03  # Lower threshold for poor quality images
+        elif avg_quality > 0.8:
+            quality_adjustment = 0.02  # Raise threshold for high quality images
+        else:
+            quality_adjustment = 0.0
+        
+        # Calculate final threshold
+        threshold = base_threshold + ref_adjustment + quality_adjustment
+        
+        # Ensure threshold is in reasonable range
+        threshold = max(min(threshold, 0.75), 0.57)
+        
+        return threshold
