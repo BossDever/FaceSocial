@@ -20,24 +20,24 @@ class MilvusClient:
     
     def __init__(self, host: str = "milvus", port: int = 19530, 
              collection_name: str = "face_embeddings", dim: int = 128):
-         """
-    Initialize the Milvus client.
-    
-    Parameters:
-    - host: Milvus server host
-    - port: Milvus server port
-    - collection_name: Default collection name
-    - dim: Dimension of face embeddings
-    """
-    self.host = host
-    self.port = port
-    self.default_collection_name = collection_name
-    self.dim = dim
-    
-    # ในขั้นตอนการพัฒนา ให้ใช้หน่วยความจำเสมอ
-    self.connected = False
-    print("Using in-memory storage for development.")
-    self._init_placeholder_storage()
+        """
+        Initialize the Milvus client.
+        
+        Parameters:
+        - host: Milvus server host
+        - port: Milvus server port
+        - collection_name: Default collection name
+        - dim: Dimension of face embeddings
+        """
+        self.host = host
+        self.port = port
+        self.default_collection_name = collection_name
+        self.dim = dim
+        
+        # ในขั้นตอนการพัฒนา ให้ใช้หน่วยความจำเสมอ
+        self.connected = False
+        print("Using in-memory storage for development.")
+        self._init_placeholder_storage()
         
         # Try to connect to Milvus
         if MILVUS_AVAILABLE:
