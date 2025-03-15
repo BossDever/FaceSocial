@@ -165,8 +165,59 @@ for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do
     fi
 done
 
+# Enhanced CUDA library verification - handle CUDA 12 to CUDA 11 mapping
+echo "=== Enhanced CUDA Library Verification ==="
+
+# Check specifically for critical ONNX Runtime libraries
+critical_libs=("libcublas.so.11" "libcublasLt.so.11")
+for lib in "${critical_libs[@]}"; do
+    if [ ! -f "/usr/lib/x86_64-linux-gnu/$lib" ]; then
+        echo "❌ Critical library missing: $lib"
+        echo "Attempting aggressive mapping from any available version..."
+        
+        # Try to map from CUDA 12 version
+        v12_lib=$(echo "$lib" | sed 's/\.11/.12/')
+        if find /usr -name "$v12_lib" | grep -q .; then
+            source=$(find /usr -name "$v12_lib" | head -n1)
+            echo "⚡ Found CUDA 12 version: $source"
+            ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
+            echo "Created mapping: $source -> /usr/lib/x86_64-linux-gnu/$lib"
+        else
+            # Try base library without version
+            base_lib=$(echo "$lib" | sed 's/\.so.*/.so/')
+            if find /usr -name "$base_lib" | grep -q .; then
+                source=$(find /usr -name "$base_lib" | head -n1)
+                echo "⚡ Found base version: $source"
+                ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
+                echo "Created mapping: $source -> /usr/lib/x86_64-linux-gnu/$lib"
+            else
+                # Ultimate fallback - find any related library
+                lib_prefix=$(echo "$lib" | cut -d. -f1)
+                if find /usr -name "${lib_prefix}*" | grep -q .; then
+                    source=$(find /usr -name "${lib_prefix}*" | head -n1)
+                    echo "⚡ Last resort mapping: $source"
+                    ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
+                    echo "Created mapping: $source -> /usr/lib/x86_64-linux-gnu/$lib"
+                else
+                    echo "❌ Could not find any suitable library for $lib"
+                fi
+            fi
+        fi
+    else
+        echo "✅ Found critical library: $lib"
+    fi
+done
+
 # Update LD_LIBRARY_PATH to include all possible CUDA library locations
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu
+
+# Show all CUDA libraries
+echo "=== Available CUDA Libraries ==="
+find /usr/lib/x86_64-linux-gnu -name "libcublas*" -o -name "libcudnn*"
+echo "=============================="
+
+# Run the CUDA manager to ensure proper setup
+python /app/tools/cuda_manager.py
 
 echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 
