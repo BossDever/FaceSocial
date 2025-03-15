@@ -130,12 +130,10 @@ class ModelEnsemble:
             if os.path.exists(arcface_path):
                 try:
                     print(f"Found ArcFace model at: {arcface_path}")
-                    # Get available ONNX providers
-                    providers = ort.get_available_providers()
-                    print(f"Available ONNX providers: {providers}")
                     
-                    # Create ONNX Runtime session
-                    session = ort.InferenceSession(arcface_path, providers=providers)
+                    # Import the ONNX helper to get the best providers
+                    from app.core.onnx_helper import create_onnx_session
+                    session = create_onnx_session(arcface_path)
                     
                     # Store session
                     self.models['arcface'] = {
@@ -165,11 +163,10 @@ class ModelEnsemble:
             if os.path.exists(cosface_path):
                 try:
                     print(f"Found CosFace model at: {cosface_path}")
-                    # Get available ONNX providers
-                    providers = ort.get_available_providers()
                     
-                    # Create ONNX Runtime session
-                    session = ort.InferenceSession(cosface_path, providers=providers)
+                    # Import the ONNX helper to get the best providers
+                    from app.core.onnx_helper import create_onnx_session
+                    session = create_onnx_session(cosface_path)
                     
                     # Store session
                     self.models['cosface'] = {
