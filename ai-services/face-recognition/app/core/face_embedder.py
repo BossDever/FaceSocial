@@ -6,9 +6,6 @@ from typing import List, Tuple, Dict, Any, Optional, Union
 import time
 import uuid
 
-# ในสถานการณ์จริง คุณจะต้องดาวน์โหลดโมเดล FaceNet 20180402-114759 และเก็บไว้ในโฟลเดอร์ที่เหมาะสม
-# URL: https://github.com/davidsandberg/facenet/tree/master/src/models/20180402-114759
-
 class FaceEmbedder:
     """
     Face embedder class using FaceNet for generating face embeddings.
@@ -27,10 +24,32 @@ class FaceEmbedder:
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
         
+        # Check if model path is provided and exists
+        if model_path is None:
+            # Try to find the model in standard locations
+            standard_paths = [
+                "/app/models/facenet/20180402-114759.pb",
+                "/app/app/models/facenet/20180402-114759.pb",
+                "/home/suwit/FaceSocial/ai-services/face-recognition/app/models/facenet/20180402-114759.pb"
+            ]
+            
+            for path in standard_paths:
+                if os.path.exists(path):
+                    model_path = path
+                    break
+        
+        self.model_path = model_path
+        print(f"FaceNet model path: {model_path}")
+        
         # Load the FaceNet model
         if model_path and os.path.exists(model_path):
-            print(f"Loading FaceNet model from {model_path}")
-            self.model = tf.saved_model.load(model_path)
+            # Load SavedModel or frozen graph depending on the file
+            if model_path.endswith('.pb'):
+                print(f"Loading FaceNet frozen model from {model_path}")
+                self._load_frozen_graph(model_path)
+            else:
+                print(f"Loading FaceNet checkpoint from {model_path}")
+                self._load_checkpoint(model_path)
         else:
             print("Model path not provided or does not exist. Using a placeholder model.")
             # Create a placeholder model for development
@@ -38,6 +57,51 @@ class FaceEmbedder:
         
         # Set the input shape required by the model
         self.input_shape = (160, 160)
+    
+    def _load_frozen_graph(self, model_path):
+        """
+        Load a frozen graph TensorFlow model.
+        """
+        try:
+            with tf.io.gfile.GFile(model_path, 'rb') as f:
+                graph_def = tf.compat.v1.GraphDef()
+                graph_def.ParseFromString(f.read())
+            
+            # Create a graph
+            self.graph = tf.Graph()
+            with self.graph.as_default():
+                tf.import_graph_def(graph_def, name='')
+                
+                # Get input and output tensors
+                self.input_tensor = self.graph.get_tensor_by_name('input:0')
+                self.embeddings_tensor = self.graph.get_tensor_by_name('embeddings:0')
+                self.phase_train_tensor = self.graph.get_tensor_by_name('phase_train:0')
+                
+                # Create a session
+                config = tf.compat.v1.ConfigProto()
+                config.gpu_options.allow_growth = True
+                self.sess = tf.compat.v1.Session(graph=self.graph, config=config)
+                
+            print("FaceNet model loaded successfully (frozen graph)")
+            self.model_type = 'frozen'
+            
+        except Exception as e:
+            print(f"Error loading frozen graph: {str(e)}")
+            self._create_placeholder_model()
+    
+    def _load_checkpoint(self, model_path):
+        """
+        Load a TensorFlow checkpoint model.
+        """
+        try:
+            # Here we would implement the logic to load a checkpoint
+            # For now, fall back to placeholder
+            print("Checkpoint loading not fully implemented, using placeholder")
+            self._create_placeholder_model()
+            
+        except Exception as e:
+            print(f"Error loading checkpoint: {str(e)}")
+            self._create_placeholder_model()
     
     def _create_placeholder_model(self):
         """
@@ -50,6 +114,7 @@ class FaceEmbedder:
         x = tf.keras.layers.GlobalAveragePooling2D()(x)
         outputs = tf.keras.layers.Dense(128, activation=None)(x)
         self.model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        self.model_type = 'placeholder'
         print("Created placeholder FaceNet model.")
     
     def preprocess_face(self, face_image: np.ndarray) -> np.ndarray:
@@ -75,15 +140,18 @@ class FaceEmbedder:
         elif face_image.shape[2] == 4:
             face_image = cv2.cvtColor(face_image, cv2.COLOR_RGBA2RGB)
         
-        # Convert to float and scale pixel values to [0, 1]
-        face_image = face_image.astype(np.float32) / 255.0
-        
-        # Normalize the image (subtract mean and divide by std)
-        mean = np.mean(face_image)
-        std = np.std(face_image)
-        face_image = (face_image - mean) / std
-        
-        return face_image
+        # Standardize the image
+        if self.model_type == 'frozen':
+            # FaceNet expects standardized images
+            standardized = (face_image - 127.5) / 128.0
+            return standardized
+        else:
+            # For placeholder model
+            face_image = face_image.astype(np.float32) / 255.0
+            mean = np.mean(face_image)
+            std = np.std(face_image)
+            face_image = (face_image - mean) / std
+            return face_image
     
     def generate_embedding(self, face_image: np.ndarray) -> np.ndarray:
         """
@@ -98,22 +166,28 @@ class FaceEmbedder:
         # Preprocess the face
         preprocessed_face = self.preprocess_face(face_image)
         
-        # Add batch dimension
-        input_tensor = np.expand_dims(preprocessed_face, axis=0)
-        
         # Generate embedding
-        if isinstance(self.model, tf.keras.Model):
-            # For the placeholder model
-            embedding = self.model.predict(input_tensor)[0]
+        if self.model_type == 'frozen':
+            # Add batch dimension
+            input_tensor = np.expand_dims(preprocessed_face, axis=0)
+            
+            # Generate embedding using the frozen graph
+            feed_dict = {
+                self.input_tensor: input_tensor,
+                self.phase_train_tensor: False
+            }
+            embedding = self.sess.run(self.embeddings_tensor, feed_dict=feed_dict)[0]
         else:
-            # For the loaded SavedModel
-            embedding = self.model(input_tensor)[0]
+            # For placeholder model
+            input_tensor = np.expand_dims(preprocessed_face, axis=0)
+            embedding = self.model.predict(input_tensor)[0]
         
         # Normalize the embedding
         embedding = embedding / np.linalg.norm(embedding)
         
         return embedding
     
+    # Rest of the methods remain unchanged
     def calculate_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """
         Calculate similarity between two face embeddings.

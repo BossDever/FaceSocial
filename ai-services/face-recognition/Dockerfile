@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir \
     redis==4.6.0 \
     python-multipart
 
+# สร้างโฟลเดอร์สำหรับเก็บโมเดล
+RUN mkdir -p /app/models/facenet
+
 # Copy application code
 COPY . /app/
 

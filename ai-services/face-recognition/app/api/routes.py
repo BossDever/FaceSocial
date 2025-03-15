@@ -23,7 +23,10 @@ from app.models.schemas import (
 router = APIRouter()
 
 # Initialize FaceEmbedder with model path
-model_path = os.getenv("FACENET_MODEL_PATH", None)
+model_path = "/home/suwit/FaceSocial/ai-services/face-recognition/app/models/facenet/20180402-114759.pb"
+if not os.path.exists(model_path):
+    model_path = os.getenv("FACENET_MODEL_PATH", None)
+
 face_embedder = FaceEmbedder(model_path)
 
 # Initialize MilvusClient
