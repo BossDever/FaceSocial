@@ -20,6 +20,15 @@ class ModelEnsemble:
         - base_model_path: Base path to the models directory
         """
         self.base_path = base_model_path
+        print(f"Initializing ModelEnsemble with base path: {base_model_path}")
+        
+        # List all files in model directory tree
+        if os.path.exists(base_model_path):
+            for root, dirs, files in os.walk(base_model_path):
+                print(f"Models directory {root} contains: {files}")
+        else:
+            print(f"Models base path does not exist: {base_model_path}")
+        
         self.models = {}
         self.model_weights = {}
         
@@ -38,7 +47,7 @@ class ModelEnsemble:
         # Initialize model weights
         self._init_weights()
         
-        print(f"Loaded {len(self.models)} models for ensemble")
+        print(f"Loaded {len(self.models)} models for ensemble: {list(self.models.keys())}")
     
     def _load_facenet(self):
         """Load FaceNet model if available"""
