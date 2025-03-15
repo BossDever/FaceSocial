@@ -40,7 +40,13 @@ services:
               count: all
               capabilities: [gpu]
     working_dir: /app
-    command: bash -c "cd /app && python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
+    command: >
+      bash -c "
+        mkdir -p /usr/lib/x86_64-linux-gnu/;
+        ln -sf /usr/local/cuda/lib64/libcublas.so /usr/lib/x86_64-linux-gnu/libcublas.so.11;
+        ln -sf /usr/local/cuda/lib64/libcublasLt.so /usr/lib/x86_64-linux-gnu/libcublasLt.so.11;
+        cd /app && python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+      "
     depends_on:
       - milvus
 
