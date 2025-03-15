@@ -34,8 +34,15 @@ milvus_host = os.getenv("MILVUS_HOST", "milvus")
 milvus_port = int(os.getenv("MILVUS_PORT", "19530"))
 milvus_client = MilvusClient(host=milvus_host, port=milvus_port)
 
-# Default similarity threshold
-DEFAULT_SIMILARITY_THRESHOLD = 0.75
+# Update the default threshold to be consistent across all endpoints
+DEFAULT_SIMILARITY_THRESHOLD = 0.63  # Changed from 0.75 to match ensemble_compare
+
+# Define adaptive thresholds for different scenarios
+THRESHOLDS = {
+    "strict": 0.68,     # Higher threshold for sensitive applications 
+    "standard": 0.63,   # Default threshold for general use
+    "relaxed": 0.58     # Lower threshold for applications where false negatives are worse than false positives
+}
 
 @router.post("/embed", response_model=FaceEmbeddingResponse)
 async def generate_embedding(request: FaceEmbeddingRequest):
@@ -122,6 +129,9 @@ async def compare_faces_multiple(request: dict):
         if method not in ['max', 'average']:
             raise HTTPException(status_code=400, detail="method must be 'max' or 'average'")
         
+        # Get threshold (default: standard threshold)
+        threshold = request.get('threshold', DEFAULT_SIMILARITY_THRESHOLD)
+        
         # Decode query face
         query_base64 = request['query_face']
         query_image_data = base64.b64decode(query_base64)
@@ -152,14 +162,14 @@ async def compare_faces_multiple(request: dict):
             similarity = np.mean([face_embedder.calculate_similarity(query_embedding, ref_emb) for ref_emb in reference_embeddings])
         
         # Determine if same person
-        is_same_person = similarity >= DEFAULT_SIMILARITY_THRESHOLD
+        is_same_person = similarity >= threshold
         
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
         
         return {
             "similarity": similarity,
             "is_same_person": is_same_person,
-            "threshold_used": DEFAULT_SIMILARITY_THRESHOLD,
+            "threshold_used": threshold,
             "processing_time_ms": processing_time
         }
         
