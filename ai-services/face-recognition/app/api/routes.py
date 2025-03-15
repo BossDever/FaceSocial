@@ -588,6 +588,30 @@ async def smart_compare_faces(request: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in smart comparison: {str(e)}")
 
+# Add this utility function before the ensemble_compare_faces function
+def convert_numpy_types(obj):
+    """
+    Recursively converts NumPy types to Python native types for JSON serialization
+    
+    Parameters:
+    - obj: Object that may contain NumPy types
+    
+    Returns:
+    - Object with all NumPy types converted to Python native types
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.number):
+        return obj.item()  # Converts to Python int/float
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list) or isinstance(obj, tuple):
+        return [convert_numpy_types(i) for i in obj]
+    else:
+        return obj
+
 @router.post("/ensemble-compare", response_model=Dict[str, Any])
 async def ensemble_compare_faces(request: dict):
     """
@@ -700,7 +724,8 @@ async def ensemble_compare_faces(request: dict):
             "confidence_level": calculate_confidence_level(final_similarity, threshold, False)
         }
         
-        return response
+        # Convert any NumPy types to Python native types before returning
+        return convert_numpy_types(response)
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in ensemble comparison: {str(e)}")
