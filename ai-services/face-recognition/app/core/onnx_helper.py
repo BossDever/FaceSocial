@@ -44,38 +44,64 @@ def verify_cuda_available() -> bool:
         # Get ONNX providers
         providers = ort.get_available_providers()
         if 'CUDAExecutionProvider' not in providers:
+            print("CUDAExecutionProvider not available in ONNX Runtime")
             return False
-            
-        # Create a simple session options
-        options = ort.SessionOptions()
-        options.log_severity_level = 0  # Reduce verbosity
-            
-        # Try to create a session with CUDA explicitly
+        
+        print(f"Available ONNX providers: {providers}")
+        
+        # Try creating a simple model and run inference
         try:
-            # Simple identity model
-            x = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+            # Create a simple test tensor
+            test_data = np.random.rand(1, 3, 10, 10).astype(np.float32)
             
-            # First try CPU to ensure the model works
-            sess_cpu = ort.InferenceSession(
-                None, 
-                providers=['CPUExecutionProvider'],
+            # Set up a simple session options
+            options = ort.SessionOptions()
+            options.log_severity_level = 3  # Reduce verbosity
+            
+            # Create an in-memory model for testing
+            input_name = "input"
+            output_name = "output"
+            
+            from onnx import helper, TensorProto
+            import onnx
+            
+            # Create a simple identity model
+            node_def = helper.make_node(
+                "Identity",
+                inputs=[input_name],
+                outputs=[output_name],
+            )
+            
+            graph_def = helper.make_graph(
+                [node_def],
+                "test-model",
+                [helper.make_tensor_value_info(input_name, TensorProto.FLOAT, [1, 3, 10, 10])],
+                [helper.make_tensor_value_info(output_name, TensorProto.FLOAT, [1, 3, 10, 10])],
+            )
+            
+            model_def = helper.make_model(graph_def, producer_name="onnx-example")
+            model_bytes = model_def.SerializeToString()
+            
+            # Try to create a session with CUDA provider
+            cuda_session = ort.InferenceSession(
+                model_bytes,
+                providers=["CUDAExecutionProvider"],
                 sess_options=options
             )
             
-            # Now try CUDA
-            sess_cuda = ort.InferenceSession(
-                None,
-                providers=['CUDAExecutionProvider'],
-                sess_options=options
-            )
+            # Run inference
+            outputs = cuda_session.run([output_name], {input_name: test_data})
             
             # If we got here, CUDA is working
+            print("✅ CUDA verification successful - ran test model on GPU")
             return True
+            
         except Exception as e:
-            print(f"CUDA verification failed: {str(e)}")
+            print(f"❌ CUDA verification failed: {str(e)}")
             return False
+            
     except Exception as e:
-        print(f"Error during CUDA verification: {str(e)}")
+        print(f"❌ Error during CUDA verification: {str(e)}")
         return False
 
 def check_cuda_libraries() -> Dict[str, Any]:
@@ -234,12 +260,49 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
     print(f"Creating ONNX session for {model_path} with providers: {providers}")
     
     try:
+        # First try with GPU acceleration
+        if 'CUDAExecutionProvider' in providers:
+            try:
+                # Set execution provider options for better performance
+                provider_options = [
+                    {'device_id': 0, 
+                     'arena_extend_strategy': 'kNextPowerOfTwo',
+                     'gpu_mem_limit': 2 * 1024 * 1024 * 1024,  # 2GB
+                     'cudnn_conv_algo_search': 'EXHAUSTIVE',
+                     'do_copy_in_default_stream': True,
+                    }
+                ]
+                
+                session_options = ort.SessionOptions()
+                session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                session = ort.InferenceSession(
+                    model_path, 
+                    providers=[('CUDAExecutionProvider', provider_options), 'CPUExecutionProvider'],
+                    sess_options=session_options
+                )
+                
+                # Verify that CUDA is actually being used
+                if 'CUDAExecutionProvider' in session.get_providers():
+                    print(f"✅ ONNX Session created with CUDA provider")
+                    return session
+                else:
+                    print("⚠️ CUDA provider registration succeeded but not selected by ONNX Runtime")
+                    # Fall through to CPU
+            except Exception as e:
+                print(f"⚠️ Failed to create CUDA session: {e}")
+                # Fall through to CPU
+        
+        # CPU fallback
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        session = ort.InferenceSession(model_path, providers=providers, sess_options=session_options)
-        used_provider = session.get_providers()[0]
-        print(f"✓ ONNX Session created with provider: {used_provider}")
+        session = ort.InferenceSession(
+            model_path, 
+            providers=['CPUExecutionProvider'],
+            sess_options=session_options
+        )
+        print(f"⚠️ ONNX Session created with CPU provider")
         return session
+        
     except Exception as e:
-        print(f"✗ Failed to create ONNX session with {providers}: {e}")
+        print(f"❌ Failed to create ONNX session: {e}")
         raise RuntimeError(f"Could not load ONNX model: {e}")

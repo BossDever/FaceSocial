@@ -47,6 +47,7 @@ class ModelEnsemble:
         # Initialize model weights
         self._init_weights()
         
+        # Enhanced model loading status reporting
         print(f"Loaded {len(self.models)} models for ensemble: {list(self.models.keys())}")
         for model_name, model_info in self.models.items():
             if model_info['type'] == 'onnx':
@@ -54,12 +55,28 @@ class ModelEnsemble:
                 print(f"Model '{model_name}' is using ONNX provider: {provider}")
             else:
                 print(f"Model '{model_name}' loaded successfully (type: {model_info['type']})")
-        print("=== Model Loading Summary ===")
+        
+        # Generate comprehensive loading summary
+        print("\n=== Model Loading Summary ===")
         for model_name, model_info in self.models.items():
-            status = "Loaded ✓" if model_info else "Not Loaded ✗"
-            hardware = model_info.get('session').get_providers()[0] if model_info['type'] == 'onnx' else "TensorFlow"
-            print(f"  {model_name}: {status} (Hardware: {hardware})")
-        print("=============================")
+            if model_info['type'] == 'onnx':
+                provider = model_info['session'].get_providers()[0]
+                hw_type = "GPU" if "CUDA" in provider or "TensorRT" in provider else "CPU"
+                status = f"Loaded ✓ (Hardware: {provider} [{hw_type}])"
+            else:
+                gpu_used = "GPU" if self._check_if_using_gpu() else "CPU" 
+                status = f"Loaded ✓ (Hardware: {model_info['type']} [{gpu_used}])"
+            print(f"  {model_name}: {status}")
+        print("=============================\n")
+    
+    def _check_if_using_gpu(self) -> bool:
+        """Check if TensorFlow is using GPU"""
+        try:
+            # This might need adjustment depending on how TF is configured in your environment
+            gpus = tf.config.list_physical_devices('GPU')
+            return len(gpus) > 0
+        except:
+            return False
     
     def _load_facenet(self):
         """Load FaceNet model if available"""
