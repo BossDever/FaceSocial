@@ -26,32 +26,6 @@ RUN apt-get update && apt-get install -y \
 # Add library paths to find CUDA libraries
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda-11/lib64:/usr/lib/x86_64-linux-gnu
 
-# Create a setup script to verify and fix library paths
-RUN echo '#!/bin/bash \n\
-# Check if CUDA libraries exist and create links if needed \n\
-echo "Checking CUDA libraries for ONNX Runtime..." \n\
-for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do \n\
-  if [ -f "/usr/lib/x86_64-linux-gnu/$lib" ]; then \n\
-    echo "Found $lib" \n\
-  else \n\
-    # Try to find the library elsewhere in the system \n\
-    LIB_PATH=$(find /usr -name "$lib" | head -n 1) \n\
-    if [ -n "$LIB_PATH" ]; then \n\
-      echo "Creating symlink for $lib from $LIB_PATH" \n\
-      ln -sf "$LIB_PATH" "/usr/lib/x86_64-linux-gnu/$lib" \n\
-    else \n\
-      echo "WARNING: $lib not found" \n\
-    fi \n\
-  fi \n\
-done \n\
-echo "Library setup complete." \n\
-# Start the actual application \n\
-if [ "$ENVIRONMENT" = "development" ]; then \n\
-  uvicorn main:app --host 0.0.0.0 --port 8001 --reload; \n\
-else \n\
-  uvicorn main:app --host 0.0.0.0 --port 8001; \n\
-fi' > /app/start.sh && chmod +x /app/start.sh
-
 # Make sure the start script is executable
 RUN chmod +x /app/start.sh
 
@@ -80,9 +54,6 @@ RUN echo "==== CUDA Library Locations ====" && \
     find /usr/ -name "libcublasLt.so*" || true && \
     find /usr/ -name "libcudnn.so*" || true && \
     echo "================================"
-
-# Run CUDA setup during image build to ensure proper symbolic links
-RUN python /app/tools/cuda_setup.py
 
 # Install CUDA libraries needed for ONNX Runtime and create appropriate symlinks
 RUN apt-get update && apt-get install -y --no-install-recommends \
