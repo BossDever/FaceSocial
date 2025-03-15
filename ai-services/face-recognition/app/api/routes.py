@@ -294,3 +294,543 @@ async def register_face(request: FaceRegistrationRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error registering face: {str(e)}")
+    
+    from fastapi.responses import HTMLResponse  # เพิ่มบรรทัดนี้ที่ด้านบนของไฟล์ ในส่วน imports
+
+# เพิ่ม endpoint นี้ที่ด้านล่างของไฟล์ (ต่อจาก endpoint อื่นๆ)
+@router.get("/demo")
+async def face_recognition_demo():
+    """
+    Show a demo page for testing Face Recognition Service.
+    """
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Face Recognition Demo</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+            h1, h2, h3 { color: #333; }
+            .container { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px; }
+            .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; flex: 1; min-width: 300px; background: #f9f9f9; }
+            .result-box { margin-top: 15px; padding: 10px; border: 1px solid #eee; border-radius: 5px; background: white; }
+            img { max-width: 100%; border: 1px solid #eee; border-radius: 4px; }
+            button { padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+            button:hover { background-color: #45a049; }
+            input, select { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+            .image-preview { height: 200px; display: flex; align-items: center; justify-content: center; }
+            .log { font-family: monospace; font-size: 12px; overflow: auto; max-height: 200px; background: #f5f5f5; padding: 10px; margin-top: 10px; border-radius: 4px; }
+            .tabs { display: flex; border-bottom: 1px solid #ccc; margin-bottom: 20px; }
+            .tab { padding: 10px 20px; cursor: pointer; }
+            .tab.active { background: #f1f1f1; border: 1px solid #ccc; border-bottom: none; border-radius: 4px 4px 0 0; }
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background-color: #f2f2f2; }
+            .similarity-high { color: green; font-weight: bold; }
+            .similarity-med { color: orange; }
+            .similarity-low { color: red; }
+        </style>
+    </head>
+    <body>
+        <h1>Face Recognition Demo</h1>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="openTab(event, 'embed-tab')">Generate Embedding</div>
+            <div class="tab" onclick="openTab(event, 'compare-tab')">Compare Faces</div>
+            <div class="tab" onclick="openTab(event, 'register-tab')">Register Face</div>
+            <div class="tab" onclick="openTab(event, 'identify-tab')">Identify Face</div>
+        </div>
+        
+        <!-- Generate Embedding Tab -->
+        <div id="embed-tab" class="tab-content active">
+            <h2>Generate Face Embedding</h2>
+            <div class="container">
+                <div class="card">
+                    <h3>Input Face</h3>
+                    <input type="file" id="embed-image-upload" accept="image/*" onchange="previewImage('embed-image-upload', 'embed-preview')">
+                    <div class="image-preview">
+                        <img id="embed-preview" src="" alt="Preview" style="display: none">
+                    </div>
+                    <button onclick="generateEmbedding()">Generate Embedding</button>
+                </div>
+                
+                <div class="card">
+                    <h3>Embedding Result</h3>
+                    <div class="result-box" id="embed-result">
+                        <p>Embedding will appear here...</p>
+                    </div>
+                    <h4>Quality Score: <span id="quality-score">-</span></h4>
+                    <div class="log" id="embed-log"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Compare Faces Tab -->
+        <div id="compare-tab" class="tab-content">
+            <h2>Compare Two Faces</h2>
+            <div class="container">
+                <div class="card">
+                    <h3>First Face</h3>
+                    <input type="file" id="face1-upload" accept="image/*" onchange="previewImage('face1-upload', 'face1-preview')">
+                    <div class="image-preview">
+                        <img id="face1-preview" src="" alt="Preview" style="display: none">
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Second Face</h3>
+                    <input type="file" id="face2-upload" accept="image/*" onchange="previewImage('face2-upload', 'face2-preview')">
+                    <div class="image-preview">
+                        <img id="face2-preview" src="" alt="Preview" style="display: none">
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Comparison Result</h3>
+                    <button onclick="compareFaces()">Compare Faces</button>
+                    <div class="result-box" id="compare-result">
+                        <p>Comparison results will appear here...</p>
+                    </div>
+                    <div class="log" id="compare-log"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Register Face Tab -->
+        <div id="register-tab" class="tab-content">
+            <h2>Register Face</h2>
+            <div class="container">
+                <div class="card">
+                    <h3>Face to Register</h3>
+                    <input type="file" id="register-image-upload" accept="image/*" onchange="previewImage('register-image-upload', 'register-preview')">
+                    <div class="image-preview">
+                        <img id="register-preview" src="" alt="Preview" style="display: none">
+                    </div>
+                    
+                    <h3>User Information</h3>
+                    <label for="user-id">User ID:</label>
+                    <input type="number" id="user-id" placeholder="Enter user ID (e.g., 123)">
+                    
+                    <label for="collection-name">Collection:</label>
+                    <input type="text" id="collection-name" value="users" placeholder="Collection name">
+                    
+                    <button onclick="registerFace()">Register Face</button>
+                </div>
+                
+                <div class="card">
+                    <h3>Registration Result</h3>
+                    <div class="result-box" id="register-result">
+                        <p>Registration results will appear here...</p>
+                    </div>
+                    <div class="log" id="register-log"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Identify Face Tab -->
+        <div id="identify-tab" class="tab-content">
+            <h2>Identify Face</h2>
+            <div class="container">
+                <div class="card">
+                    <h3>Face to Identify</h3>
+                    <input type="file" id="identify-image-upload" accept="image/*" onchange="previewImage('identify-image-upload', 'identify-preview')">
+                    <div class="image-preview">
+                        <img id="identify-preview" src="" alt="Preview" style="display: none">
+                    </div>
+                    
+                    <h3>Search Parameters</h3>
+                    <label for="top-k">Top K Results:</label>
+                    <input type="number" id="top-k" value="5" min="1" max="20">
+                    
+                    <label for="min-similarity">Minimum Similarity:</label>
+                    <input type="range" id="min-similarity" min="0" max="100" value="75" oninput="updateSimilarityValue()">
+                    <span id="min-similarity-value">0.75</span>
+                    
+                    <label for="identify-collection">Collection:</label>
+                    <input type="text" id="identify-collection" value="users" placeholder="Collection name">
+                    
+                    <button onclick="identifyFace()">Identify Face</button>
+                </div>
+                
+                <div class="card">
+                    <h3>Identification Results</h3>
+                    <div class="result-box" id="identify-result">
+                        <p>Identification results will appear here...</p>
+                    </div>
+                    <div class="log" id="identify-log"></div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // Tab functionality
+            function openTab(evt, tabName) {
+                var tabcontents = document.getElementsByClassName("tab-content");
+                for (var i = 0; i < tabcontents.length; i++) {
+                    tabcontents[i].classList.remove("active");
+                }
+                
+                var tabs = document.getElementsByClassName("tab");
+                for (var i = 0; i < tabs.length; i++) {
+                    tabs[i].classList.remove("active");
+                }
+                
+                document.getElementById(tabName).classList.add("active");
+                evt.currentTarget.classList.add("active");
+            }
+            
+            // Image preview functionality
+            function previewImage(inputId, previewId) {
+                const file = document.getElementById(inputId).files[0];
+                const preview = document.getElementById(previewId);
+                
+                if (file) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    }
+                    
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            // Log functionality
+            function log(elementId, message) {
+                const logElement = document.getElementById(elementId);
+                const timestamp = new Date().toLocaleTimeString();
+                logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+                logElement.scrollTop = logElement.scrollHeight;
+            }
+            
+            // Update similarity slider value
+            function updateSimilarityValue() {
+                const slider = document.getElementById('min-similarity');
+                const value = slider.value / 100;
+                document.getElementById('min-similarity-value').textContent = value.toFixed(2);
+            }
+            
+            // Generate embedding functionality
+            async function generateEmbedding() {
+                const fileInput = document.getElementById('embed-image-upload');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert('Please select an image first');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = async function(e) {
+                    try {
+                        log('embed-log', 'Generating embedding...');
+                        
+                        // Get base64 data (remove data URL prefix)
+                        const base64Image = e.target.result.split(',')[1];
+                        
+                        // Call API
+                        const response = await fetch('/v1/face/embed', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                image: base64Image,
+                                detect_and_align: true
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`API error: ${errorText}`);
+                        }
+                        
+                        const data = await response.json();
+                        log('embed-log', `Generated embedding with size ${data.embedding_size}`);
+                        
+                        // Display results
+                        document.getElementById('quality-score').textContent = data.quality_score.toFixed(2);
+                        
+                        // Show abbreviated embedding vector
+                        const embedding = data.embedding;
+                        const embedStr = JSON.stringify(embedding.slice(0, 5)) + 
+                                        ` ... (${embedding.length - 10} more values) ... ` + 
+                                        JSON.stringify(embedding.slice(-5));
+                        
+                        document.getElementById('embed-result').innerHTML = `
+                            <p><strong>Embedding Vector:</strong> ${embedStr}</p>
+                            <p><strong>Vector Size:</strong> ${data.embedding_size}</p>
+                            <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                        `;
+                        
+                    } catch (error) {
+                        log('embed-log', `ERROR: ${error.message}`);
+                        document.getElementById('embed-result').innerHTML = `
+                            <p style="color: red;">Error: ${error.message}</p>
+                        `;
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            // Compare faces functionality
+            async function compareFaces() {
+                const face1Input = document.getElementById('face1-upload');
+                const face2Input = document.getElementById('face2-upload');
+                
+                if (!face1Input.files || !face1Input.files.length === 0 ||
+                    !face2Input.files || !face2Input.files.length === 0) {
+                    alert('Please select both face images');
+                    return;
+                }
+                
+                const face1File = face1Input.files[0];
+                const face2File = face2Input.files[0];
+                
+                // Read first face
+                const reader1 = new FileReader();
+                reader1.onload = function(e1) {
+                    const base64Image1 = e1.target.result.split(',')[1];
+                    
+                    // Read second face
+                    const reader2 = new FileReader();
+                    reader2.onload = async function(e2) {
+                        try {
+                            log('compare-log', 'Comparing faces...');
+                            
+                            const base64Image2 = e2.target.result.split(',')[1];
+                            
+                            // Call API
+                            const response = await fetch('/v1/face/compare', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    or_face1: base64Image1,
+                                    or_face2: base64Image2
+                                })
+                            });
+                            
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                throw new Error(`API error: ${errorText}`);
+                            }
+                            
+                            const data = await response.json();
+                            log('compare-log', `Comparison complete: similarity = ${data.similarity.toFixed(4)}`);
+                            
+                            // Determine similarity class for styling
+                            let similarityClass = 'similarity-low';
+                            if (data.similarity >= 0.85) {
+                                similarityClass = 'similarity-high';
+                            } else if (data.similarity >= 0.75) {
+                                similarityClass = 'similarity-med';
+                            }
+                            
+                            // Display results
+                            document.getElementById('compare-result').innerHTML = `
+                                <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
+                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
+                                <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
+                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                            `;
+                            
+                        } catch (error) {
+                            log('compare-log', `ERROR: ${error.message}`);
+                            document.getElementById('compare-result').innerHTML = `
+                                <p style="color: red;">Error: ${error.message}</p>
+                            `;
+                        }
+                    };
+                    
+                    reader2.readAsDataURL(face2File);
+                };
+                
+                reader1.readAsDataURL(face1File);
+            }
+            
+            // Register face functionality
+            async function registerFace() {
+                const fileInput = document.getElementById('register-image-upload');
+                const userIdInput = document.getElementById('user-id');
+                const collectionInput = document.getElementById('collection-name');
+                
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert('Please select an image first');
+                    return;
+                }
+                
+                const userId = parseInt(userIdInput.value);
+                if (isNaN(userId) || userId <= 0) {
+                    alert('Please enter a valid user ID (positive number)');
+                    return;
+                }
+                
+                const collection = collectionInput.value.trim();
+                if (!collection) {
+                    alert('Please enter a collection name');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = async function(e) {
+                    try {
+                        log('register-log', `Registering face for user ID: ${userId}...`);
+                        
+                        // Get base64 data
+                        const base64Image = e.target.result.split(',')[1];
+                        
+                        // Call API
+                        const response = await fetch('/v1/face/register', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                user_id: userId,
+                                or_faces: [base64Image],
+                                collection_name: collection
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`API error: ${errorText}`);
+                        }
+                        
+                        const data = await response.json();
+                        log('register-log', `Registration ${data.success ? 'successful' : 'failed'}`);
+                        
+                        // Display results
+                        document.getElementById('register-result').innerHTML = `
+                            <p><strong>Registration:</strong> ${data.success ? 'Successful ✓' : 'Failed ✗'}</p>
+                            <p><strong>Embedding IDs:</strong> ${data.embedding_ids.join(', ')}</p>
+                            <p><strong>Quality Scores:</strong> ${data.quality_scores.map(q => q.toFixed(2)).join(', ')}</p>
+                            <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                        `;
+                        
+                    } catch (error) {
+                        log('register-log', `ERROR: ${error.message}`);
+                        document.getElementById('register-result').innerHTML = `
+                            <p style="color: red;">Error: ${error.message}</p>
+                        `;
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            // Identify face functionality
+            async function identifyFace() {
+                const fileInput = document.getElementById('identify-image-upload');
+                const topK = parseInt(document.getElementById('top-k').value);
+                const minSimilarity = parseFloat(document.getElementById('min-similarity').value) / 100;
+                const collection = document.getElementById('identify-collection').value.trim();
+                
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert('Please select an image first');
+                    return;
+                }
+                
+                if (isNaN(topK) || topK <= 0) {
+                    alert('Please enter a valid number for Top K');
+                    return;
+                }
+                
+                if (!collection) {
+                    alert('Please enter a collection name');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = async function(e) {
+                    try {
+                        log('identify-log', 'Identifying face...');
+                        
+                        // Get base64 data
+                        const base64Image = e.target.result.split(',')[1];
+                        
+                        // Call API
+                        const response = await fetch('/v1/face/identify', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                or_face: base64Image,
+                                top_k: topK,
+                                min_similarity: minSimilarity,
+                                collection_name: collection
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`API error: ${errorText}`);
+                        }
+                        
+                        const data = await response.json();
+                        log('identify-log', `Found ${data.matches.length} matches`);
+                        
+                        // Display results
+                        let resultHtml = '';
+                        
+                        if (data.matches.length === 0) {
+                            resultHtml = '<p>No matches found.</p>';
+                        } else {
+                            resultHtml = `
+                                <p>Found ${data.matches.length} potential matches:</p>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>User ID</th>
+                                            <th>Similarity</th>
+                                            <th>Embedding ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                            `;
+                            
+                            for (const match of data.matches) {
+                                // Determine similarity class for styling
+                                let similarityClass = 'similarity-low';
+                                if (match.similarity >= 0.85) {
+                                    similarityClass = 'similarity-high';
+                                } else if (match.similarity >= 0.75) {
+                                    similarityClass = 'similarity-med';
+                                }
+                                
+                                resultHtml += `
+                                    <tr>
+                                        <td>${match.user_id}</td>
+                                        <td class="${similarityClass}">${match.similarity.toFixed(4)}</td>
+                                        <td>${match.embedding_id}</td>
+                                    </tr>
+                                `;
+                            }
+                            
+                            resultHtml += `
+                                    </tbody>
+                                </table>
+                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                            `;
+                        }
+                        
+                        document.getElementById('identify-result').innerHTML = resultHtml;
+                        
+                    } catch (error) {
+                        log('identify-log', `ERROR: ${error.message}`);
+                        document.getElementById('identify-result').innerHTML = `
+                            <p style="color: red;">Error: ${error.message}</p>
+                        `;
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
