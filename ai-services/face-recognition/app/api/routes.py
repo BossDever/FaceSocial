@@ -656,6 +656,7 @@ async def ensemble_compare_faces(request: dict):
         # Process reference faces
         reference_ensemble_embeddings = []
         reference_qualities = []
+        reference_images = []  # Store the actual images for gender detection
         
         for ref_base64 in request['reference_faces']:
             ref_image_data = base64.b64decode(ref_base64)
@@ -665,6 +666,7 @@ async def ensemble_compare_faces(request: dict):
             if ref_image is not None:
                 # Enhance image
                 ref_image = improve_image_quality(ref_image)
+                reference_images.append(ref_image)
                 
                 # Assess quality
                 quality_score = face_embedder.assess_quality(ref_image)
@@ -708,6 +710,13 @@ async def ensemble_compare_faces(request: dict):
         # Determine if same person
         is_same_person = final_similarity >= threshold
         
+        # Check for gender mismatch using weighted similarity
+        result = face_embedder.calculate_weighted_top_n_average_similarity(
+            face_embedder.generate_embedding(query_image),
+            [face_embedder.generate_embedding(img) for img in reference_images], 
+            [query_image] + reference_images
+        )
+        
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
         
         # Prepare response
@@ -723,6 +732,21 @@ async def ensemble_compare_faces(request: dict):
             "model_similarities": model_avg_similarities,
             "confidence_level": calculate_confidence_level(final_similarity, threshold, False)
         }
+        
+        # เพิ่มข้อมูลเพศในผลลัพธ์ถ้ามี
+        if 'gender_match' in result and result['gender_match'] is not None:
+            gender_warning = not result['gender_match']
+            gender_confidence = result.get('gender_confidence', 0.0)
+            
+            if gender_warning and gender_confidence > 0.75:
+                # ปรับระดับความเชื่อมั่นถ้าเพศต่างกัน
+                response["confidence_level"] = "LOW" if final_similarity > threshold else "VERY LOW"
+                response["gender_warning"] = True
+                response["gender_confidence"] = gender_confidence
+                
+                # ถ้าค่าความเหมือนใกล้เคียง threshold และเพศต่างกัน ให้ระบุว่าเป็นคนละคน
+                if final_similarity < (threshold + 0.08):
+                    response["is_same_person"] = False
         
         # Convert any NumPy types to Python native types before returning
         return convert_numpy_types(response)
