@@ -1191,6 +1191,7 @@ async def face_recognition_demo_multiple():
                     <option value="average">Average Similarity</option>
                     <option value="top_n">Top-N Average (N=3)</option>
                     <option value="smart">Smart Adaptive Comparison</option>
+                    <option value="ensemble">Model Ensemble (Multiple Models)</option>
                 </select>
                 <br>
                 <button onclick="compareWithMultiple()">Compare Face</button>
@@ -1344,6 +1345,8 @@ async def face_recognition_demo_multiple():
                         } else if (method === 'smart') {
                             apiEndpoint = '/v1/face/smart-compare';
                             requestBody.top_n = 3;  // Default to top 3 matches
+                        } else if (method === 'ensemble') {
+                            apiEndpoint = '/v1/face/ensemble-compare';
                         } else {
                             requestBody.method = method;
                         }
@@ -1379,6 +1382,40 @@ async def face_recognition_demo_multiple():
                                     <p>Max Similarity: ${data.details.max_similarity.toFixed(4)}</p>
                                     <p>Top-N Similarity: ${data.details.top_n_similarity.toFixed(4)}</p>
                                     <p>Top Similarities: ${data.details.top_similarities.map(s => s.toFixed(4)).join(', ')}</p>
+                                </div>
+                            `;
+                        } else if (method === 'ensemble') {
+                            log(`Ensemble comparison complete: similarity = ${data.similarity.toFixed(4)}`);
+                            
+                            document.getElementById('comparison-result').innerHTML = `
+                                <p><strong>Similarity Score:</strong> <span class="${getSimilarityClass(data.similarity)}">${data.similarity.toFixed(4)}</span></p>
+                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
+                                <p><strong>Confidence Level:</strong> <span class="confidence-${data.confidence_level.toLowerCase()}">${data.confidence_level}</span></p>
+                                <p><strong>Threshold:</strong> ${data.threshold_used}</p>
+                                <p><strong>Models Used:</strong> ${data.models_used.join(', ')}</p>
+                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                                
+                                <div class="details-section">
+                                    <h4>Model Details</h4>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Model</th>
+                                                <th>Weight</th>
+                                                <th>Avg. Similarity</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${Object.entries(data.model_weights).map(([model, weight]) => `
+                                                <tr>
+                                                    <td>${model}</td>
+                                                    <td>${weight.toFixed(2)}</td>
+                                                    <td>${data.model_similarities[model]?.toFixed(4) || 'N/A'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                    <p><strong>Top Similarities:</strong> ${data.top_similarities.map(s => s.toFixed(4)).join(', ')}</p>
                                 </div>
                             `;
                         } else {
