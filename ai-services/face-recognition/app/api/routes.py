@@ -588,6 +588,123 @@ async def smart_compare_faces(request: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in smart comparison: {str(e)}")
 
+@router.post("/ensemble-compare", response_model=Dict[str, Any])
+async def ensemble_compare_faces(request: dict):
+    """
+    Compare faces using ensemble of multiple face recognition models.
+    
+    Parameters:
+    - query_face: Base64 encoded query face image
+    - reference_faces: List of base64 encoded reference face images
+    - threshold: Optional custom threshold (default: 0.63)
+    
+    Returns:
+    - Enhanced comparison results with ensemble model details
+    """
+    try:
+        start_time = time.time()
+        
+        # Validate request
+        if 'query_face' not in request or 'reference_faces' not in request:
+            raise HTTPException(status_code=400, detail="Must provide query_face and reference_faces")
+        
+        if not isinstance(request['reference_faces'], list) or len(request['reference_faces']) == 0:
+            raise HTTPException(status_code=400, detail="reference_faces must be a non-empty list")
+        
+        # Get threshold parameter (default: 0.63)
+        threshold = request.get('threshold', 0.63)
+        
+        # Decode query face
+        query_base64 = request['query_face']
+        query_image_data = base64.b64decode(query_base64)
+        query_nparr = np.frombuffer(query_image_data, np.uint8)
+        query_image = cv2.imdecode(query_nparr, cv2.IMREAD_COLOR)
+        
+        if query_image is None:
+            raise HTTPException(status_code=400, detail="Invalid query image data")
+        
+        # Enhanced preprocessing for query image
+        query_image = improve_image_quality(query_image)
+        
+        # Generate ensemble embedding for query face
+        query_ensemble_embedding = face_embedder.generate_ensemble_embedding(query_image)
+        
+        # Process reference faces
+        reference_ensemble_embeddings = []
+        reference_qualities = []
+        
+        for ref_base64 in request['reference_faces']:
+            ref_image_data = base64.b64decode(ref_base64)
+            ref_nparr = np.frombuffer(ref_image_data, np.uint8)
+            ref_image = cv2.imdecode(ref_nparr, cv2.IMREAD_COLOR)
+            
+            if ref_image is not None:
+                # Enhance image
+                ref_image = improve_image_quality(ref_image)
+                
+                # Assess quality
+                quality_score = face_embedder.assess_quality(ref_image)
+                reference_qualities.append(quality_score)
+                
+                # Generate ensemble embedding
+                ref_ensemble_embedding = face_embedder.generate_ensemble_embedding(ref_image)
+                reference_ensemble_embeddings.append(ref_ensemble_embedding)
+        
+        # Calculate similarities for each reference
+        similarities = []
+        model_details = {}
+        
+        for ref_ensemble_embedding in reference_ensemble_embeddings:
+            # Get detailed similarity results
+            similarity_result = face_embedder.ensemble.calculate_similarity(
+                query_ensemble_embedding,
+                ref_ensemble_embedding
+            )
+            
+            similarities.append(similarity_result["ensemble_similarity"])
+            
+            # Collect model-specific details
+            for model_name, similarity in similarity_result["model_similarities"].items():
+                if model_name not in model_details:
+                    model_details[model_name] = []
+                model_details[model_name].append(similarity)
+        
+        # Calculate average similarities for each model
+        model_avg_similarities = {}
+        for model_name, sims in model_details.items():
+            model_avg_similarities[model_name] = sum(sims) / len(sims) if sims else 0.0
+        
+        # Sort and get top similarities
+        similarities.sort(reverse=True)
+        top_similarities = similarities[:min(3, len(similarities))]
+        
+        # Final similarity score (can be max or average of top 3)
+        final_similarity = top_similarities[0] if top_similarities else 0.0
+        
+        # Determine if same person
+        is_same_person = final_similarity >= threshold
+        
+        processing_time = (time.time() - start_time) * 1000  # Convert to ms
+        
+        # Prepare response
+        response = {
+            "similarity": final_similarity,
+            "is_same_person": is_same_person,
+            "threshold_used": threshold,
+            "processing_time_ms": processing_time,
+            "reference_count": len(reference_ensemble_embeddings),
+            "top_similarities": top_similarities,
+            "models_used": list(face_embedder.ensemble.models.keys()),
+            "model_weights": face_embedder.ensemble.model_weights,
+            "model_similarities": model_avg_similarities,
+            "confidence_level": calculate_confidence_level(final_similarity, threshold, False)
+        }
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in ensemble comparison: {str(e)}")
+
 # เพิ่ม endpoint นี้ที่ด้านล่างของไฟล์ (ต่อจาก endpoint อื่นๆ)
 @router.get("/demo")
 async def face_recognition_demo():
