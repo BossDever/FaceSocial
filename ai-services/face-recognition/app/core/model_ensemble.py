@@ -187,22 +187,14 @@ class ModelEnsemble:
     
     def _init_weights(self):
         """Initialize model weights based on available models"""
-        # ค่าน้ำหนักเริ่มต้นใหม่ตามประสิทธิภาพของแต่ละโมเดล
-        # ให้น้ำหนักกับ ArcFace มากขึ้น เนื่องจากมีความแม่นยำสูงกว่า
-        self.default_weights = {
-            'facenet': 0.25,  # ลดลงจาก 0.35
-            'arcface': 0.50,  # เพิ่มขึ้นจาก 0.35
-            'cosface': 0.25   # ลดลงจาก 0.30
-        }
-        
-        # นำค่าน้ำหนักมาใช้กับโมเดลที่โหลดได้สำเร็จ
+        # Only include weights for models that were successfully loaded
         total_weight = 0
         for model_name in self.models.keys():
             if model_name in self.default_weights:
                 self.model_weights[model_name] = self.default_weights[model_name]
                 total_weight += self.default_weights[model_name]
         
-        # ปรับให้ผลรวมเป็น 1.0 เสมอ
+        # Normalize weights if needed
         if total_weight > 0 and abs(total_weight - 1.0) > 1e-6:
             for model_name in self.model_weights:
                 self.model_weights[model_name] /= total_weight

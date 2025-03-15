@@ -455,7 +455,7 @@ class FaceEmbedder:
                                                  target_images: List[np.ndarray] = None,
                                                  top_n: int = 3) -> Dict[str, Any]:
         """
-        Calculate similarity using weighted Top-N Average method with improved gender detection.
+        Calculate similarity using weighted Top-N Average method.
         
         Parameters:
         - embedding: Face embedding to compare
@@ -508,62 +508,50 @@ class FaceEmbedder:
         original_similarities = [item[1] for item in top_similarities]
         avg_similarity = sum(original_similarities) / len(original_similarities) if original_similarities else 0.0
         
-        # Determine if genders match - ปรับปรุงการตรวจสอบเพศให้มีความแม่นยำมากขึ้น
+        # Determine if genders match
         gender_match = None
         gender_confidence = 0.0
         
-        if target_images and len(target_images) > 0 and target_images[0] is not None:
+        if target_images and len(target_images) > 0:
             # สร้างรายการเพศและความเชื่อมั่นสำหรับภาพอ้างอิงทั้งหมด
             target_genders = []
             target_confidences = []
             
-            # (1) ตรวจสอบเพศของภาพ query
-            query_gender, query_confidence = self.gender_detector.predict_gender(target_images[0])
+            for img in target_images:
+                if img is not None and img.size > 0:
+                    gender, confidence = self.estimate_gender(img)
+                    if gender != 'unknown' and confidence > 0.6:  # เพิ่มขีดจำกัดความเชื่อมั่น
+                        target_genders.append(gender)
+                        target_confidences.append(confidence)
             
-            # ตรวจสอบเฉพาะเมื่อมีความเชื่อมั่นเพียงพอ
-            if query_confidence >= 0.65:
-                # (2) ตรวจสอบเพศของภาพอ้างอิงทั้งหมด
-                for img in target_images[1:]:  # เริ่มจากภาพที่ 2 (ข้ามภาพ query)
-                    if img is not None and img.size > 0:
-                        gender, confidence = self.gender_detector.predict_gender(img)
-                        # เก็บข้อมูลเฉพาะเมื่อมีความเชื่อมั่นเพียงพอ
-                        if gender != 'unknown' and confidence >= 0.65:
-                            target_genders.append(gender)
-                            target_confidences.append(confidence)
+            # หาว่ามีเพศใดมากที่สุดในภาพอ้างอิง
+            if target_genders:
+                from collections import Counter
+                gender_counts = Counter(target_genders)
+                majority_gender, count = gender_counts.most_common(1)[0]
                 
-                # (3) หาเพศที่พบมากที่สุดในภาพอ้างอิง
-                if target_genders:
-                    from collections import Counter
-                    gender_counts = Counter(target_genders)
-                    majority_gender, count = gender_counts.most_common(1)[0]
+                # ถ้ามีความเห็นพ้องต้องกันสูง จะเชื่อถือได้มากกว่า
+                if count / len(target_genders) >= 0.7:  # 70% ขึ้นไปให้เชื่อถือได้
+                    # หาค่าเฉลี่ยความเชื่อมั่น 
+                    avg_confidence = sum([conf for g, conf in zip(target_genders, target_confidences) 
+                                        if g == majority_gender]) / count
                     
-                    # ตรวจสอบว่ามีความเห็นพ้องกันเพียงพอหรือไม่
-                    consistency = count / len(target_genders)
+                    # ตรวจสอบเพศของภาพ query
+                    query_gender, query_confidence = self.estimate_gender(target_images[0])
                     
-                    # (4) ถ้ามีความเห็นพ้องต้องกันสูง จะเชื่อถือได้มากกว่า
-                    if consistency >= 0.7:  # 70% ขึ้นไปให้เชื่อถือได้
-                        # หาค่าเฉลี่ยความเชื่อมั่น 
-                        avg_confidence = sum([conf for g, conf in zip(target_genders, target_confidences) 
-                                           if g == majority_gender]) / count
+                    # ตัดสินใจว่าเพศตรงกันหรือไม่
+                    gender_match = (query_gender == majority_gender)
+                    gender_confidence = min(avg_confidence, query_confidence)
+                    
+                    # ถ้าเพศไม่ตรงกันและความเชื่อมั่นสูง ให้ปรับลดค่าความเหมือนลง
+                    if not gender_match and gender_confidence > 0.75:
+                        # ถ้าเรามั่นใจว่าเพศต่างกัน ลดคะแนนความเหมือนลง 20%
+                        avg_similarity *= 0.80
                         
-                        # ตัดสินใจว่าเพศตรงกันหรือไม่
-                        gender_match = (query_gender == majority_gender)
-                        gender_confidence = min(avg_confidence, query_confidence)
-                        
-                        # (5) ปรับลดค่าความเหมือนเมื่อเพศต่างกัน
-                        if not gender_match:
-                            # ค่า penalty จากความเชื่อมั่นในการตรวจสอบเพศ
-                            gender_penalty = 0.4 * gender_confidence  # คำนวณบทลงโทษตามความเชื่อมั่น
-                            
-                            # ลดค่าความเหมือนลงตามบทลงโทษ
-                            # ยิ่งมั่นใจว่าเพศต่างกันมาก ยิ่งลงโทษมาก
-                            avg_similarity *= (1.0 - gender_penalty)
-                            
-                            # ถ้าค่าความเหมือนยังเกิน threshold และความเชื่อมั่นในการตรวจสอบเพศสูงมาก
-                            # ให้บังคับให้ค่าต่ำกว่า threshold เพื่อป้องกันการแจ้งผลผิดพลาด
-                            threshold = self.adaptive_threshold(len(target_embeddings), [])
-                            if avg_similarity >= threshold and gender_confidence > 0.80:
-                                avg_similarity = threshold * 0.90  # ลดให้ต่ำกว่า threshold 10%
+                        # ถ้าคะแนนความเหมือนยังเหลือมากกว่า threshold
+                        # แต่ความแตกต่างทางเพศชัดเจน ให้บังคับให้ค่าต่ำกว่า threshold
+                        if avg_similarity >= self.adaptive_threshold(len(target_embeddings), []) and gender_confidence > 0.85:
+                            avg_similarity = self.adaptive_threshold(len(target_embeddings), []) - 0.02
         
         return {
             "similarity": avg_similarity,
