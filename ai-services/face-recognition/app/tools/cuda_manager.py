@@ -15,6 +15,7 @@ import subprocess
 import sys
 from typing import Dict, List, Optional, Tuple, Set
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -24,12 +25,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cuda_manager")
 
-# ONNX Runtime 1.16.0 requires CUDA 11.x libraries
+# CUDA library requirements (ONNX Runtime 1.16.0 needs CUDA 11.x)
 REQUIRED_LIBS = {
     # Format: target_name: [source_alternatives]
-    "libcublas.so.11": ["libcublas.so.12.*", "libcublas.so.12", "libcublas.so"],
-    "libcublasLt.so.11": ["libcublasLt.so.12.*", "libcublasLt.so.12", "libcublasLt.so"],
-    "libcudnn.so.8": ["libcudnn.so.8.*", "libcudnn.so"]
+    "libcublas.so.11": ["libcublas.so.12", "libcublas.so"],
+    "libcublasLt.so.11": ["libcublasLt.so.12", "libcublasLt.so"],
+    "libcudnn.so.8": ["libcudnn.so.8.*", "libcudnn.so"],
+    "libcufft.so.10": ["libcufft.so", "libcufft.so.11", "libcufft.so.*"],
+    "libcurand.so.10": ["libcurand.so", "libcurand.so.*"],
+    "libcusolver.so.11": ["libcusolver.so", "libcusolver.so.*"],
+    "libcusparse.so.11": ["libcusparse.so", "libcusparse.so.*"],
 }
 
 TARGET_DIR = "/usr/lib/x86_64-linux-gnu"
@@ -143,21 +148,93 @@ def fix_cuda_libraries() -> Dict[str, bool]:
             else:
                 logger.error(f"❌ Failed to create link for {target_lib}")
         else:
-            # If no source library found, try creating a direct symlink to non-versioned lib
-            alt_source = None
-            base_lib = target_lib.split('.')[0] + '.so'
-            alt_path = os.path.join("/usr/local/cuda/lib64", base_lib)
-            
-            if os.path.exists(alt_path):
-                alt_source = alt_path
-                logger.info(f"Found alternative source: {alt_source}")
-                success = create_symlink(alt_source, target_path)
-                results[target_lib] = success
-            else:
-                logger.warning(f"❌ Could not find source file for {target_lib}")
-                results[target_lib] = False
+            # If no source found, look for existing link that might work
+            logger.warning(f"❌ Could not find source file for {target_lib}")
+            results[target_lib] = False
     
     return results
+
+def download_cuda_libraries() -> bool:
+    """
+    Attempt to download and install missing CUDA libraries.
+    This is a more aggressive approach if creating symlinks fails.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Determine which CUDA libraries are missing
+        missing_libs = []
+        for lib in REQUIRED_LIBS.keys():
+            target_path = os.path.join(TARGET_DIR, lib)
+            if not os.path.exists(target_path):
+                missing_libs.append(lib)
+        
+        if not missing_libs:
+            logger.info("No missing CUDA libraries to download")
+            return True
+        
+        logger.info(f"Attempting to install missing CUDA libraries: {missing_libs}")
+        
+        # First try to install using apt
+        try:
+            apt_packages = [
+                "libcublas-11-*", 
+                "libcublaslt-11-*", 
+                "libcudnn8"
+            ]
+            
+            cmd = ["apt-get", "update", "-y"]
+            logger.info(f"Running: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True)
+            
+            cmd = ["apt-get", "install", "-y"] + apt_packages
+            logger.info(f"Running: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True)
+            
+            # Verify if installation helped
+            fixed = fix_cuda_libraries()
+            if all(fixed.values()):
+                logger.info("All CUDA libraries now available after apt install")
+                return True
+        except Exception as e:
+            logger.warning(f"apt-get installation failed: {e}")
+        
+        # If apt installation didn't work, try direct download
+        tmp_dir = "/tmp/cuda_libs"
+        os.makedirs(tmp_dir, exist_ok=True)
+        
+        # This is a simplified example - in production, you should verify downloads
+        # and use more secure download methods
+        cuda_deb_url = "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/"
+        cuda_debs = [
+            "libcublas-11-8_11.11.3.6-1_amd64.deb",
+            "libcublas-dev-11-8_11.11.3.6-1_amd64.deb",
+            "libcudnn8_8.9.2.26-1+cuda11.8_amd64.deb"
+        ]
+        
+        for deb in cuda_debs:
+            try:
+                target_file = os.path.join(tmp_dir, deb)
+                url = f"{cuda_deb_url}{deb}"
+                
+                logger.info(f"Downloading {url}")
+                cmd = ["wget", "-O", target_file, url]
+                subprocess.run(cmd, check=True)
+                
+                logger.info(f"Installing {target_file}")
+                cmd = ["dpkg", "-i", target_file]
+                subprocess.run(cmd, check=True)
+            except Exception as e:
+                logger.warning(f"Failed to download/install {deb}: {e}")
+        
+        # Fix library links again after download attempt
+        fixed = fix_cuda_libraries()
+        return all(fixed.values())
+    
+    except Exception as e:
+        logger.error(f"Failed to download CUDA libraries: {e}")
+        return False
 
 def add_ld_library_paths():
     """Add all potential CUDA library paths to LD_LIBRARY_PATH."""
@@ -186,48 +263,6 @@ def add_ld_library_paths():
     os.environ["LD_LIBRARY_PATH"] = new_ld_library_path
     logger.info(f"Updated LD_LIBRARY_PATH: {new_ld_library_path}")
 
-def create_hard_copy_if_needed(target_lib: str) -> bool:
-    """
-    Create a hard copy of the library if symlinking fails.
-    This is a more aggressive approach that might work in restricted environments.
-    """
-    try:
-        # Map to alternative libraries
-        alternatives = {
-            "libcublas.so.11": ["libcublas.so.12", "libcublas.so"],
-            "libcublasLt.so.11": ["libcublasLt.so.12", "libcublasLt.so"],
-        }
-        
-        # If the target library isn't in our mapping, return False
-        if target_lib not in alternatives:
-            return False
-            
-        source_options = alternatives[target_lib]
-        target_path = os.path.join(TARGET_DIR, target_lib)
-        
-        # Try each source option
-        for source_name in source_options:
-            # Find all instances of this library
-            source_files = find_library_files(source_name)
-            
-            if source_files:
-                # Use the first match
-                source_path = source_files[0]
-                
-                # Create a hard copy
-                logger.info(f"Creating hard copy: {source_path} -> {target_path}")
-                shutil.copy2(source_path, target_path)
-                
-                # Verify the copy
-                if os.path.exists(target_path):
-                    logger.info(f"✅ Successfully created hard copy for {target_lib}")
-                    return True
-        
-        return False
-    except Exception as e:
-        logger.error(f"Error creating hard copy for {target_lib}: {e}")
-        return False
-
 def verify_onnx_cuda_support() -> bool:
     """Verify if ONNX Runtime can use CUDA."""
     try:
@@ -252,7 +287,7 @@ def display_cuda_libraries():
     logger.info("=== CUDA Libraries on System ===")
     
     # Find all CUDA libraries
-    cmd = 'find /usr -name "libcublas*.so*" -o -name "libcudnn*.so*" | sort'
+    cmd = 'find /usr -name "libcuda*.so*" -o -name "libcublas*.so*" -o -name "libcudnn*.so*" | sort'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     
     if result.stdout:
@@ -268,42 +303,12 @@ def display_cuda_libraries():
     
     logger.info("===============================")
 
-def fix_links_with_nvidia_container_toolkit():
-    """
-    Fix CUDA links using NVIDIA Container Toolkit paths.
-    This is a backup approach that works well in containers.
-    """
-    # These are common paths in NVIDIA containers
-    source_dir = "/usr/local/cuda/lib64"
-    
-    # Only proceed if the directory exists
-    if not os.path.isdir(source_dir):
-        logger.warning(f"{source_dir} does not exist, skipping toolkit approach")
-        return False
-        
-    fixes_applied = 0
-    
-    # Create direct symlinks from CUDA libraries
-    links = [
-        ("libcublas.so", "libcublas.so.11"),
-        ("libcublasLt.so", "libcublasLt.so.11"),
-    ]
-    
-    for source_name, target_name in links:
-        source_path = os.path.join(source_dir, source_name)
-        target_path = os.path.join(TARGET_DIR, target_name)
-        
-        if os.path.exists(source_path):
-            if create_symlink(source_path, target_path):
-                fixes_applied += 1
-    
-    return fixes_applied > 0
-
 def main():
     """Main function to fix CUDA libraries for ONNX Runtime."""
     logger.info("Starting CUDA Library Manager for ONNX Runtime GPU Acceleration")
     
     # Step 1: Display current environment
+    logger.info("=== Current Environment ===")
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Current LD_LIBRARY_PATH: {os.environ.get('LD_LIBRARY_PATH', 'Not set')}")
     
@@ -316,21 +321,15 @@ def main():
     # Step 4: Fix CUDA libraries by creating symlinks
     results = fix_cuda_libraries()
     
-    # Step 5: If any libraries are still missing, try the NVIDIA container toolkit approach
+    # Step 5: If any libraries missing, try to download them
     if not all(results.values()):
-        logger.info("Some libraries still missing, trying NVIDIA container toolkit approach")
-        fix_links_with_nvidia_container_toolkit()
+        logger.warning("Some CUDA libraries still missing, attempting to download")
+        download_cuda_libraries()
     
-    # Step 6: If libraries are still missing, try creating hard copies
-    for lib_name, success in results.items():
-        if not success:
-            logger.info(f"Creating hard copy for {lib_name}")
-            create_hard_copy_if_needed(lib_name)
-    
-    # Step 7: Display CUDA libraries after fixes
+    # Step 6: Display CUDA libraries after fixes
     display_cuda_libraries()
     
-    # Step 8: Verify ONNX Runtime CUDA support
+    # Step 7: Verify ONNX Runtime CUDA support
     verify_onnx_cuda_support()
     
     logger.info("CUDA Library Manager completed")

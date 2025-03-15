@@ -3,9 +3,6 @@
 # Enhanced CUDA library setup for ONNX Runtime GPU acceleration
 echo "Setting up CUDA libraries for ONNX Runtime..."
 
-# Run the CUDA manager script for comprehensive setup
-python /app/tools/cuda_manager.py
-
 # Function to find CUDA libraries with more specific patterns
 find_library() {
     local lib_name=$1
@@ -161,22 +158,7 @@ for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do
             ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
             echo "✓ Created symlink for $lib"
         else
-            # Try to directly copy from CUDA 12.x to 11.x
-            if [[ $lib == *"libcublas"* ]]; then
-                source=$(find /usr -name "libcublas.so" | head -n 1)
-                if [ -n "$source" ]; then
-                    ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
-                    echo "✓ Created symlink from $source to $lib"
-                fi
-            elif [[ $lib == *"libcublasLt"* ]]; then
-                source=$(find /usr -name "libcublasLt.so" | head -n 1)
-                if [ -n "$source" ]; then
-                    ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
-                    echo "✓ Created symlink from $source to $lib"
-                fi
-            else
-                echo "✗ Could not find $lib"
-            fi
+            echo "✗ Could not find $lib"
         fi
     else
         echo "✓ Found $lib"
