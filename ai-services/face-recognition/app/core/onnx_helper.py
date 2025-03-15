@@ -266,21 +266,22 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
     print(f"Creating ONNX session for {model_path} with providers: {providers}")
     
     try:
-        # First try with GPU acceleration
+        # First try with GPU acceleration - FIX: corrected provider options format
         if 'CUDAExecutionProvider' in providers:
             try:
                 # Set execution provider options for better performance
-                provider_options = [
-                    {'device_id': 0, 
-                     'arena_extend_strategy': 'kNextPowerOfTwo',
-                     'gpu_mem_limit': 2 * 1024 * 1024 * 1024,  # 2GB
-                     'cudnn_conv_algo_search': 'EXHAUSTIVE',
-                     'do_copy_in_default_stream': True,
-                    }
-                ]
+                provider_options = {
+                    'device_id': 0,
+                    'arena_extend_strategy': 'kNextPowerOfTwo',
+                    'gpu_mem_limit': 2 * 1024 * 1024 * 1024,  # 2GB
+                    'cudnn_conv_algo_search': 'EXHAUSTIVE',
+                    'do_copy_in_default_stream': True,
+                }
                 
                 session_options = ort.SessionOptions()
                 session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                
+                # FIX: Correct format for provider options
                 session = ort.InferenceSession(
                     model_path, 
                     providers=[('CUDAExecutionProvider', provider_options), 'CPUExecutionProvider'],
@@ -296,6 +297,19 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
                     # Fall through to CPU
             except Exception as e:
                 print(f"⚠️ Failed to create CUDA session: {e}")
+                # Try without provider options
+                try:
+                    print("Trying CUDA provider without options...")
+                    session = ort.InferenceSession(
+                        model_path,
+                        providers=['CUDAExecutionProvider', 'CPUExecutionProvider'],
+                        sess_options=session_options
+                    )
+                    if 'CUDAExecutionProvider' in session.get_providers():
+                        print(f"✅ ONNX Session created with CUDA provider (no options)")
+                        return session
+                except Exception as nested_e:
+                    print(f"⚠️ Failed second CUDA attempt: {nested_e}")
                 # Fall through to CPU
         
         # CPU fallback
