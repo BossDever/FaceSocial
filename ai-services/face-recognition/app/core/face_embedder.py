@@ -5,10 +5,11 @@ import tensorflow as tf
 from typing import List, Tuple, Dict, Any, Optional, Union
 import time
 import uuid
+from app.core.model_ensemble import ModelEnsemble
 
 class FaceEmbedder:
     """
-    Face embedder class using FaceNet for generating face embeddings.
+    Face embedder class using multiple models for generating face embeddings.
     """
     
     def __init__(self, model_path: str = None):
@@ -57,6 +58,12 @@ class FaceEmbedder:
         
         # Set the input shape required by the model
         self.input_shape = (160, 160)
+        
+        # Initialize model ensemble
+        self.ensemble = ModelEnsemble('/app/models')
+        self.use_ensemble = len(self.ensemble.models) > 1  # Use ensemble if multiple models available
+        
+        print(f"FaceEmbedder initialized with {'ensemble' if self.use_ensemble else 'single model'}")
     
     def _load_frozen_graph(self, model_path):
         """
@@ -187,7 +194,50 @@ class FaceEmbedder:
         
         return embedding
     
-    # Rest of the methods remain unchanged
+    def generate_ensemble_embedding(self, face_image: np.ndarray) -> Dict[str, Any]:
+        """
+        Generate ensemble embedding from a face image.
+        
+        Parameters:
+        - face_image: Input face image
+        
+        Returns:
+        - Dictionary with ensemble embedding information
+        """
+        if self.use_ensemble:
+            return self.ensemble.generate_ensemble_embedding(face_image)
+        else:
+            # Fallback to standard embedding
+            embedding = self.generate_embedding(face_image)
+            return {
+                "model_embeddings": {"facenet": embedding},
+                "model_weights": {"facenet": 1.0}
+            }
+    
+    def calculate_ensemble_similarity(self, ensemble_emb1: Dict[str, Any], ensemble_emb2: Dict[str, Any]) -> float:
+        """
+        Calculate similarity between two ensemble embeddings.
+        
+        Parameters:
+        - ensemble_emb1: First ensemble embedding
+        - ensemble_emb2: Second ensemble embedding
+        
+        Returns:
+        - Similarity score (0-1, higher is more similar)
+        """
+        if self.use_ensemble:
+            result = self.ensemble.calculate_similarity(ensemble_emb1, ensemble_emb2)
+            return result["ensemble_similarity"]
+        else:
+            # Fallback to standard similarity calculation
+            emb1 = ensemble_emb1["model_embeddings"].get("facenet")
+            emb2 = ensemble_emb2["model_embeddings"].get("facenet")
+            
+            if emb1 is not None and emb2 is not None:
+                return self.calculate_similarity(emb1, emb2)
+            else:
+                return 0.0
+    
     def calculate_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """
         Calculate similarity between two face embeddings.
