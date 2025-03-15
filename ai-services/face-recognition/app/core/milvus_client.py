@@ -291,17 +291,17 @@ class MilvusClient:
                 print(f"Collection {collection_name} does not exist.")
                 return False
         
-        # Get collection
-        collection = Collection(collection_name)
+            # Get collection
+            collection = Collection(collection_name)
         
-        # Delete by ID - แก้ไขจาก f-string เป็นการสร้าง expression ด้วยวิธีอื่น
-        quoted_ids = [f'"{id}"' for id in embedding_ids]
-        expr = f"id in [{', '.join(quoted_ids)}]"
-        collection.delete(expr)
+            # Delete by ID - แก้ไขจาก f-string เป็นการสร้าง expression ด้วยวิธีอื่น
+            quoted_ids = [f'"{id}"' for id in embedding_ids]
+            expr = f"id in [{', '.join(quoted_ids)}]"
+            collection.delete(expr)
         
-        print(f"Deleted {len(embedding_ids)} embeddings from Milvus.")
-        return True
+            print(f"Deleted {len(embedding_ids)} embeddings from Milvus.")
+            return True
         
-    except Exception as e:
-        print(f"Error deleting embeddings: {str(e)}")
-        return False
+        except Exception as e:
+            print(f"Error deleting embeddings: {str(e)}")
+            return False
