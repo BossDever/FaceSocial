@@ -282,14 +282,14 @@ class MilvusClient:
             ]
             after_count = len(self.placeholder_storage[collection_name])
         
-        print(f"Deleted {before_count - after_count} embeddings from placeholder storage.")
-        return True
+            print(f"Deleted {before_count - after_count} embeddings from placeholder storage.")
+            return True
     
-    try:
-        # Ensure collection exists
-        if not utility.has_collection(collection_name):
-            print(f"Collection {collection_name} does not exist.")
-            return False
+        try:
+            # Ensure collection exists
+            if not utility.has_collection(collection_name):
+                print(f"Collection {collection_name} does not exist.")
+                return False
         
         # Get collection
         collection = Collection(collection_name)
