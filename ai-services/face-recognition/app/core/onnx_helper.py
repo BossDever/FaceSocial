@@ -252,6 +252,12 @@ def _create_symlink_for_lib(lib_name: str) -> bool:
 def create_onnx_session(model_path: str) -> ort.InferenceSession:
     """
     Create an ONNX runtime session with the best available provider.
+    
+    Args:
+        model_path: Path to the ONNX model file
+        
+    Returns:
+        ONNX InferenceSession configured with the best available provider
     """
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
@@ -306,3 +312,108 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
     except Exception as e:
         print(f"❌ Failed to create ONNX session: {e}")
         raise RuntimeError(f"Could not load ONNX model: {e}")
+
+def debug_onnx_provider(verbose: bool = True) -> Dict[str, Any]:
+    """
+    Debug the ONNX Runtime provider status and configuration
+    
+    Args:
+        verbose: Whether to print detailed debug information
+    
+    Returns:
+        Dictionary with debug information
+    """
+    debug_info = {
+        "available_providers": [],
+        "cuda_available": False,
+        "cuda_version": None,
+        "cuda_device_count": 0,
+        "cuda_device_properties": [],
+        "environment_variables": {},
+        "library_paths": [],
+        "errors": []
+    }
+    
+    try:
+        # Check ONNX Runtime providers
+        debug_info["available_providers"] = ort.get_available_providers()
+        debug_info["cuda_available"] = 'CUDAExecutionProvider' in debug_info["available_providers"]
+        
+        if verbose:
+            print(f"ONNX Runtime providers: {debug_info['available_providers']}")
+            print(f"CUDA available: {debug_info['cuda_available']}")
+        
+        # Check CUDA with PyTorch if available
+        try:
+            import torch
+            debug_info["cuda_version"] = torch.version.cuda
+            debug_info["cuda_device_count"] = torch.cuda.device_count()
+            
+            # Get device properties
+            for i in range(debug_info["cuda_device_count"]):
+                props = {
+                    "name": torch.cuda.get_device_name(i),
+                    "total_memory": torch.cuda.get_device_properties(i).total_memory,
+                    "compute_capability": f"{torch.cuda.get_device_capability(i)[0]}.{torch.cuda.get_device_capability(i)[1]}"
+                }
+                debug_info["cuda_device_properties"].append(props)
+            
+            if verbose and debug_info["cuda_device_count"] > 0:
+                print(f"CUDA version: {debug_info['cuda_version']}")
+                print(f"CUDA device count: {debug_info['cuda_device_count']}")
+                for i, props in enumerate(debug_info["cuda_device_properties"]):
+                    print(f"Device {i}: {props['name']} (Compute: {props['compute_capability']})")
+        except:
+            debug_info["errors"].append("PyTorch-based CUDA check failed")
+        
+        # Check environment variables
+        for var in ['LD_LIBRARY_PATH', 'CUDA_HOME', 'CUDA_PATH', 'CUDNN_PATH']:
+            if var in os.environ:
+                debug_info["environment_variables"][var] = os.environ[var]
+        
+        # Check library paths
+        for lib in ['libcudart.so', 'libcublas.so', 'libcudnn.so']:
+            lib_locations = []
+            try:
+                result = subprocess.run(['find', '/usr', '-name', lib], 
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                      text=True)
+                if result.stdout:
+                    lib_locations = result.stdout.strip().split('\n')
+            except:
+                pass
+            debug_info["library_paths"].append({"name": lib, "locations": lib_locations})
+        
+    except Exception as e:
+        debug_info["errors"].append(f"Error during debug: {str(e)}")
+    
+    return debug_info
+
+def warmup_onnx_session(session: ort.InferenceSession, input_shape: Tuple[int, ...]) -> bool:
+    """
+    Warm up an ONNX session with random input to initialize any GPU caches
+    
+    Args:
+        session: ONNX inference session
+        input_shape: Shape of input tensor to use for warm-up
+        
+    Returns:
+        True if warm-up was successful, False otherwise
+    """
+    try:
+        import numpy as np
+        
+        # Get input name from model
+        input_name = session.get_inputs()[0].name
+        
+        # Create random input according to specified shape
+        random_input = np.random.rand(*input_shape).astype(np.float32)
+        
+        # Run inference for warm-up
+        _ = session.run(None, {input_name: random_input})
+        
+        print(f"✅ Warmed up ONNX session successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to warm up ONNX session: {e}")
+        return False
