@@ -1573,3 +1573,54 @@ async def face_recognition_demo_multiple():
     </html>
     """
     return HTMLResponse(content=html_content)
+
+@router.get("/models-status")
+async def models_status():
+    """
+    Show status of all face recognition models.
+    """
+    # Check FaceNet
+    facenet_status = {"loaded": False, "path": None}
+    if hasattr(face_embedder, 'model_type'):
+        facenet_status["loaded"] = True
+        facenet_status["type"] = face_embedder.model_type
+        facenet_status["path"] = face_embedder.model_path
+    
+    # Check ensemble models
+    ensemble_models = {}
+    if hasattr(face_embedder, 'ensemble') and hasattr(face_embedder.ensemble, 'models'):
+        for model_name, model_info in face_embedder.ensemble.models.items():
+            ensemble_models[model_name] = {
+                "type": model_info.get("type", "unknown"),
+                "dim": model_info.get("dim", "unknown"),
+                "path": model_info.get("path", "unknown")
+            }
+    
+    # Check weights
+    weights = {}
+    if hasattr(face_embedder, 'ensemble') and hasattr(face_embedder.ensemble, 'model_weights'):
+        weights = face_embedder.ensemble.model_weights
+    
+    # Search for model files
+    model_files = []
+    for root, dirs, files in os.walk('/app'):
+        for file in files:
+            if file.endswith(('.onnx', '.pb', '.h5')):
+                model_files.append(os.path.join(root, file))
+    
+    # Check ONNX providers
+    onnx_providers = []
+    try:
+        import onnxruntime as ort
+        onnx_providers = ort.get_available_providers()
+    except:
+        pass
+    
+    return {
+        "facenet": facenet_status,
+        "ensemble_models": ensemble_models,
+        "model_weights": weights,
+        "use_ensemble": face_embedder.use_ensemble if hasattr(face_embedder, 'use_ensemble') else False,
+        "model_files_found": model_files,
+        "onnx_providers": onnx_providers
+    }
