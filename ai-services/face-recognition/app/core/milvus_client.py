@@ -258,16 +258,16 @@ class MilvusClient:
             return []
     
     def delete_embeddings(self, embedding_ids: List[str], collection_name: str = None) -> bool:
-    """
-    Delete face embeddings from Milvus.
+        """
+        Delete face embeddings from Milvus.
     
-    Parameters:
-    - embedding_ids: List of embedding IDs to delete
-    - collection_name: Name of the collection (uses default if None)
+        Parameters:
+        - embedding_ids: List of embedding IDs to delete
+        - collection_name: Name of the collection (uses default if None)
     
-    Returns:
-    - True if successful, False otherwise
-    """
+        Returns:
+        - True if successful, False otherwise
+        """
     collection_name = collection_name or self.default_collection_name
     
     if not self.connected:
