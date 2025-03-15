@@ -1,0 +1,137 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>FaceSocial AI System Status</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+                h1, h2 { color: #333; }
+                .status-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+                .status-card h2 { margin-top: 0; }
+                .status-ok { color: green; }
+                .status-warning { color: orange; }
+                .status-error { color: red; }
+                table { border-collapse: collapse; width: 100%; }
+                th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+                tr:hover { background-color: #f5f5f5; }
+            </style>
+        </head>
+        <body>
+            <h1>FaceSocial AI System Status</h1>
+            
+            <div class="status-card">
+                <h2>Model Status</h2>
+                <h3>Face Recognition Models</h3>
+                <table>
+                    <tr>
+                        <th>Model</th>
+                        <th>Type</th>
+                        <th>Path</th>
+                        <th>Status</th>
+                    </tr>
+        
+                    <tr>
+                        <td>facenet</td>
+                        <td>Unknown</td>
+                        <td>/app/app/models/facenet/model-20180402-114759.ckpt-275.index</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                    <tr>
+                        <td>facenet</td>
+                        <td>TensorFlow</td>
+                        <td>/app/app/models/facenet/20180402-114759.pb</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                    <tr>
+                        <td>facenet</td>
+                        <td>Unknown</td>
+                        <td>/app/app/models/facenet/model-20180402-114759.meta</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                    <tr>
+                        <td>arcface</td>
+                        <td>ONNX</td>
+                        <td>/app/app/models/arcface/arcface.onnx</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                    <tr>
+                        <td>cosface</td>
+                        <td>ONNX</td>
+                        <td>/app/app/models/cosface/glint360k_cosface_r50.onnx</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                </table>
+                
+                <h3>Gender Detection Models</h3>
+                <table>
+                    <tr>
+                        <th>Model</th>
+                        <th>Type</th>
+                        <th>Path</th>
+                        <th>Status</th>
+                    </tr>
+        
+                    <tr>
+                        <td>gender_detector</td>
+                        <td>Keras</td>
+                        <td>/app/app/models/gender/simple_gender_model.h5</td>
+                        <td class="status-ok">✓ Loaded</td>
+                    </tr>
+            
+                </table>
+            </div>
+            
+            <div class="status-card">
+                <h2>ONNX Runtime Status</h2>
+        
+                <p>ONNX GPU Support: <span class="status-ok">✓ Available</span></p>
+                <p>Available providers: TensorrtExecutionProvider, CUDAExecutionProvider, AzureExecutionProvider, CPUExecutionProvider</p>
+            </div>
+            
+            <div class="status-card">
+                <h2>CUDA Libraries</h2>
+                <table>
+                    <tr>
+                        <th>Library</th>
+                        <th>Found</th>
+                        <th>Path</th>
+                        <th>Symlink Target</th>
+                    </tr>
+        
+                    <tr>
+                        <td>libcublas.so.11</td>
+                        <td class="status-error">✗ Not found</td>
+                        <td>N/A</td>
+                        <td>N/A</td>
+                    </tr>
+            
+                    <tr>
+                        <td>libcublasLt.so.11</td>
+                        <td class="status-error">✗ Not found</td>
+                        <td>N/A</td>
+                        <td>N/A</td>
+                    </tr>
+            
+                    <tr>
+                        <td>libcudnn.so.8</td>
+                        <td class="status-error">✗ Not found</td>
+                        <td>N/A</td>
+                        <td>N/A</td>
+                    </tr>
+            
+                </table>
+                <p><strong>LD_LIBRARY_PATH:</strong> /usr/local/lib/python3.10/dist-packages/cv2/../../lib64:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/compat/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64</p>
+                <p><strong>CUDA Version:</strong> nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2024 NVIDIA Corporation
+Built on Thu_Mar_28_02:18:24_PDT_2024
+Cuda compilation tools, release 12.4, V12.4.131
+Build cuda_12.4.r12.4/compiler.34097967_0</p>
+            </div>
+        </body>
+        </html>
+        
