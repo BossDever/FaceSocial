@@ -2,82 +2,26 @@ FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
 WORKDIR /app
 
-# ติดตั้งแพคเกจที่จำเป็น
+# Install basic dependencies only (NVIDIA container already has CUDA)
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    # Use apt-file to help locate CUDA packages
-    apt-file \
-    && apt-file update \
-    # Install specific CUDA and cuDNN packages required by ONNX Runtime
-    && apt-get install -y --no-install-recommends \
-    cuda-cudart-11-8 \
-    cuda-nvrtc-11-8 \
-    cuda-nvtx-11-8 \
-    libcufft-11-8 \
-    libcurand-11-8 \
-    libcusolver-11-8 \
-    libcusparse-11-8 \
-    libcublas-11-8 \
-    libcublaslt-11-8 \
-    libcudnn8=8.6.0* \
     && rm -rf /var/lib/apt/lists/*
 
 # Add library paths to find CUDA libraries
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda-11/lib64:/usr/lib/x86_64-linux-gnu
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu
 
-# Make sure the start script is executable
-RUN chmod +x /app/start.sh
-
-# Create start.sh script with CUDA library setup
-COPY app/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
-# Explicitly install CUDA libraries
-RUN apt-get update && apt-get install -y \
-    aptitude \
-    && aptitude search -F "%p" "libcublas|libcudnn" \
-    && apt-get install -y --no-install-recommends \
-    libcublas-12-* \
-    libcublaslt-12-* \
-    libcudnn8* \
-    && rm -rf /var/lib/apt/lists/*
-
-# Add our CUDA setup tools
+# Setup directories for CUDA tools
 RUN mkdir -p /app/tools
-COPY app/tools/cuda_setup.py /app/tools/
-RUN chmod +x /app/tools/cuda_setup.py
 
-# Find CUDA library locations for debugging
-RUN echo "==== CUDA Library Locations ====" && \
-    find /usr/ -name "libcublas.so*" || true && \
-    find /usr/ -name "libcublasLt.so*" || true && \
-    find /usr/ -name "libcudnn.so*" || true && \
-    echo "================================"
-
-# Install CUDA libraries needed for ONNX Runtime and create appropriate symlinks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcublas-12-* \
-    libcublaslt-12-* \
-    libcudnn8* \
-    && mkdir -p /usr/lib/x86_64-linux-gnu \
-    && ln -sf /usr/lib/x86_64-linux-gnu/libcublas.so.12 /usr/lib/x86_64-linux-gnu/libcublas.so.11 \
-    && ln -sf /usr/lib/x86_64-linux-gnu/libcublasLt.so.12 /usr/lib/x86_64-linux-gnu/libcublasLt.so.11 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Enhanced CUDA libraries detection and verification
-RUN echo "==== CUDA Library Detection ====" && \
-    find /usr -name "libcublas.so*" || true && \
-    find /usr -name "libcublasLt.so*" || true && \
-    find /usr -name "libcudnn.so*" || true
-
-# Run our CUDA setup tools during build to ensure symbolic links are created
+# Create tools directory and copy setup scripts
+COPY app/tools/emergency_cuda_fix.py /app/tools/
 COPY app/tools/cuda_setup.py /app/tools/
 COPY app/tools/cuda_manager.py /app/tools/
-RUN chmod +x /app/tools/cuda_setup.py /app/tools/cuda_manager.py && \
-    python /app/tools/cuda_setup.py
+COPY app/start.sh /app/start.sh
+RUN chmod +x /app/tools/*.py /app/start.sh
 
-# ติดตั้ง Python packages
+# Install Python packages
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
     uvicorn==0.27.0 \
@@ -90,8 +34,8 @@ RUN pip install --no-cache-dir \
     onnxruntime-gpu==1.16.0 \
     requests
 
-# สร้างโฟลเดอร์สำหรับเก็บโมเดล
-RUN mkdir -p /app/models/facenet
+# Create directories for models
+RUN mkdir -p /app/models/facenet /app/models/arcface /app/models/cosface /app/models/gender
 
 # Copy application code
 COPY . /app/
@@ -99,10 +43,10 @@ COPY . /app/
 # Expose port
 EXPOSE 8001
 
-# กำหนด working directory
+# Working directory
 WORKDIR /app
 
-# Environment variables for configuration
+# Environment variables
 ENV MODEL_PATH=/app/models/facenet/20180402-114759.pb \
     MILVUS_HOST=milvus \
     MILVUS_PORT=19530 \
@@ -114,5 +58,5 @@ ENV MODEL_PATH=/app/models/facenet/20180402-114759.pb \
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8001/health').raise_for_status()"
 
-# Run the application using our updated start script
+# Run the application using our start script
 CMD ["/app/start.sh"]
