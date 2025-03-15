@@ -324,3 +324,32 @@ class FaceEmbedder:
         
         # Calculate similarity with the average embedding
         return self.calculate_similarity(embedding, avg_embedding)
+
+    def calculate_top_n_average_similarity(self, embedding: np.ndarray, target_embeddings: List[np.ndarray], top_n: int = 3) -> float:
+        """
+        Calculate similarity between one embedding and multiple target embeddings
+        using Top-N Average method.
+        
+        Parameters:
+        - embedding: Face embedding to compare
+        - target_embeddings: List of target face embeddings
+        - top_n: Number of highest similarity embeddings to use for average
+        
+        Returns:
+        - Average similarity score of top N matches (0-1, higher is more similar)
+        """
+        if not target_embeddings:
+            return 0.0
+        
+        # Calculate similarity with each target embedding
+        similarities = [self.calculate_similarity(embedding, target_emb) for target_emb in target_embeddings]
+        
+        # Sort similarities in descending order and take top N
+        similarities.sort(reverse=True)
+        top_similarities = similarities[:min(top_n, len(similarities))]
+        
+        # Return average of top N similarities
+        if top_similarities:
+            return sum(top_similarities) / len(top_similarities)
+        else:
+            return 0.0
