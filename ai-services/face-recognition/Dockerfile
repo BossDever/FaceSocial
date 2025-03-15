@@ -6,20 +6,51 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    # More specific CUDA dependencies for ONNX Runtime
+    # Use apt-file to help locate CUDA packages
+    apt-file \
+    && apt-file update \
+    # Install specific CUDA and cuDNN packages required by ONNX Runtime
+    && apt-get install -y --no-install-recommends \
     cuda-cudart-11-8 \
+    cuda-nvrtc-11-8 \
+    cuda-nvtx-11-8 \
+    libcufft-11-8 \
+    libcurand-11-8 \
+    libcusolver-11-8 \
+    libcusparse-11-8 \
     libcublas-11-8 \
     libcublaslt-11-8 \
     libcudnn8=8.6.0* \
     && rm -rf /var/lib/apt/lists/*
 
 # Add library paths to find CUDA libraries
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda-11/lib64:/usr/lib/x86_64-linux-gnu
 
-# Create symbolic links if needed
-RUN ln -sf /usr/lib/x86_64-linux-gnu/libcublasLt.so.11 /usr/lib/x86_64-linux-gnu/libcublasLt.so \
-    && ln -sf /usr/lib/x86_64-linux-gnu/libcublas.so.11 /usr/lib/x86_64-linux-gnu/libcublas.so \
-    && ln -sf /usr/lib/x86_64-linux-gnu/libcudnn.so.8 /usr/lib/x86_64-linux-gnu/libcudnn.so
+# Create a setup script to verify and fix library paths
+RUN echo '#!/bin/bash \n\
+# Check if CUDA libraries exist and create links if needed \n\
+echo "Checking CUDA libraries for ONNX Runtime..." \n\
+for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do \n\
+  if [ -f "/usr/lib/x86_64-linux-gnu/$lib" ]; then \n\
+    echo "Found $lib" \n\
+  else \n\
+    # Try to find the library elsewhere in the system \n\
+    LIB_PATH=$(find /usr -name "$lib" | head -n 1) \n\
+    if [ -n "$LIB_PATH" ]; then \n\
+      echo "Creating symlink for $lib from $LIB_PATH" \n\
+      ln -sf "$LIB_PATH" "/usr/lib/x86_64-linux-gnu/$lib" \n\
+    else \n\
+      echo "WARNING: $lib not found" \n\
+    fi \n\
+  fi \n\
+done \n\
+echo "Library setup complete." \n\
+# Start the actual application \n\
+if [ "$ENVIRONMENT" = "development" ]; then \n\
+  uvicorn main:app --host 0.0.0.0 --port 8001 --reload; \n\
+else \n\
+  uvicorn main:app --host 0.0.0.0 --port 8001; \n\
+fi' > /app/start.sh && chmod +x /app/start.sh
 
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
@@ -58,9 +89,5 @@ ENV MODEL_PATH=/app/models/facenet/20180402-114759.pb \
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8001/health').raise_for_status()"
 
-# Run the application
-CMD if [ "$ENVIRONMENT" = "development" ]; then \
-        uvicorn main:app --host 0.0.0.0 --port 8001 --reload; \
-    else \
-        uvicorn main:app --host 0.0.0.0 --port 8001; \
-    fi
+# Run the application using our setup script
+CMD ["/app/start.sh"]
