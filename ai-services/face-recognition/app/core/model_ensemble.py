@@ -54,6 +54,12 @@ class ModelEnsemble:
                 print(f"Model '{model_name}' is using ONNX provider: {provider}")
             else:
                 print(f"Model '{model_name}' loaded successfully (type: {model_info['type']})")
+        print("=== Model Loading Summary ===")
+        for model_name, model_info in self.models.items():
+            status = "Loaded ✓" if model_info else "Not Loaded ✗"
+            hardware = model_info.get('session').get_providers()[0] if model_info['type'] == 'onnx' else "TensorFlow"
+            print(f"  {model_name}: {status} (Hardware: {hardware})")
+        print("=============================")
     
     def _load_facenet(self):
         """Load FaceNet model if available"""
