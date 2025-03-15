@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api import routes as face_routes
+import datetime  # Add missing import for datetime module
 
 app = FastAPI(
     title="Face Recognition API",
