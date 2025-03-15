@@ -6,6 +6,7 @@ from typing import List, Tuple, Dict, Any, Optional, Union
 import time
 import uuid
 from app.core.model_ensemble import ModelEnsemble
+from app.core.gender_detector import GenderDetector
 
 class FaceEmbedder:
     """
@@ -24,6 +25,8 @@ class FaceEmbedder:
         if gpus:
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
+        
+        self.gender_detector = GenderDetector()
         
         # Check if model path is provided and exists
         if model_path is None:
@@ -437,7 +440,7 @@ class FaceEmbedder:
             
     def estimate_gender(self, face_image: np.ndarray) -> Tuple[str, float]:
         """
-        Estimate gender from face image.
+        Estimate gender from face image using dedicated gender detector.
         
         Parameters:
         - face_image: Input face image
@@ -445,33 +448,7 @@ class FaceEmbedder:
         Returns:
         - Tuple of (predicted_gender, confidence)
         """
-        # A simple gender estimation based on face features
-        # In a real-world system, you would use a dedicated gender classification model
-        # This is a placeholder implementation
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
-        
-        # Extract simple features
-        face_width = face_image.shape[1]
-        face_height = face_image.shape[0]
-        
-        # Calculate basic face proportions
-        ratio = face_width / face_height
-        
-        # Simple heuristics for demonstration
-        # This should be replaced with a proper gender classification model
-        if ratio > 0.95:  # More square face shape
-            gender = 'male'
-            confidence = 0.6 + (ratio - 0.95) / 0.5  # Adjust confidence based on ratio
-        else:  # More oval face shape
-            gender = 'female'
-            confidence = 0.6 + (0.95 - ratio) / 0.5
-        
-        # Ensure confidence is between 0.5 and 1.0
-        confidence = min(max(confidence, 0.5), 0.95)
-        
-        return gender, confidence
+        return self.gender_detector.predict_gender(face_image)
 
     def calculate_weighted_top_n_average_similarity(self, embedding: np.ndarray, 
                                                  target_embeddings: List[np.ndarray], 
@@ -500,7 +477,6 @@ class FaceEmbedder:
         # Calculate similarity and quality for each target embedding
         similarities = []
         quality_scores = []
-        genders = []
         
         for i, target_emb in enumerate(target_embeddings):
             # Calculate base similarity
@@ -508,16 +484,10 @@ class FaceEmbedder:
             
             # If we have the original images, perform additional analysis
             quality = 0.8  # Default quality score
-            gender = None
             
             if target_images and i < len(target_images) and target_images[i] is not None:
                 # Assess image quality
                 quality = self.assess_quality(target_images[i])
-                
-                # Estimate gender
-                if quality > 0.4:  # Only estimate gender for reasonable quality images
-                    gender, _ = self.estimate_gender(target_images[i])
-                    genders.append(gender)
                 
                 # Apply quality-based weighting
                 # Higher quality images get slightly more weight
@@ -540,14 +510,54 @@ class FaceEmbedder:
         
         # Determine if genders match
         gender_match = None
-        if target_images and len(genders) > 0:
-            query_gender, _ = self.estimate_gender(target_images[0])  # Assuming first image is the query
-            gender_match = all(g == query_gender for g in genders) if genders else None
+        gender_confidence = 0.0
+        
+        if target_images and len(target_images) > 0:
+            # สร้างรายการเพศและความเชื่อมั่นสำหรับภาพอ้างอิงทั้งหมด
+            target_genders = []
+            target_confidences = []
+            
+            for img in target_images:
+                if img is not None and img.size > 0:
+                    gender, confidence = self.estimate_gender(img)
+                    if gender != 'unknown' and confidence > 0.6:  # เพิ่มขีดจำกัดความเชื่อมั่น
+                        target_genders.append(gender)
+                        target_confidences.append(confidence)
+            
+            # หาว่ามีเพศใดมากที่สุดในภาพอ้างอิง
+            if target_genders:
+                from collections import Counter
+                gender_counts = Counter(target_genders)
+                majority_gender, count = gender_counts.most_common(1)[0]
+                
+                # ถ้ามีความเห็นพ้องต้องกันสูง จะเชื่อถือได้มากกว่า
+                if count / len(target_genders) >= 0.7:  # 70% ขึ้นไปให้เชื่อถือได้
+                    # หาค่าเฉลี่ยความเชื่อมั่น 
+                    avg_confidence = sum([conf for g, conf in zip(target_genders, target_confidences) 
+                                        if g == majority_gender]) / count
+                    
+                    # ตรวจสอบเพศของภาพ query
+                    query_gender, query_confidence = self.estimate_gender(target_images[0])
+                    
+                    # ตัดสินใจว่าเพศตรงกันหรือไม่
+                    gender_match = (query_gender == majority_gender)
+                    gender_confidence = min(avg_confidence, query_confidence)
+                    
+                    # ถ้าเพศไม่ตรงกันและความเชื่อมั่นสูง ให้ปรับลดค่าความเหมือนลง
+                    if not gender_match and gender_confidence > 0.75:
+                        # ถ้าเรามั่นใจว่าเพศต่างกัน ลดคะแนนความเหมือนลง 20%
+                        avg_similarity *= 0.80
+                        
+                        # ถ้าคะแนนความเหมือนยังเหลือมากกว่า threshold
+                        # แต่ความแตกต่างทางเพศชัดเจน ให้บังคับให้ค่าต่ำกว่า threshold
+                        if avg_similarity >= self.adaptive_threshold(len(target_embeddings), []) and gender_confidence > 0.85:
+                            avg_similarity = self.adaptive_threshold(len(target_embeddings), []) - 0.02
         
         return {
             "similarity": avg_similarity,
             "top_similarities": original_similarities,
             "gender_match": gender_match,
+            "gender_confidence": gender_confidence if gender_match is not None else None,
             "quality_scores": quality_scores
         }
 
