@@ -149,6 +149,22 @@ for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do
     fi
 done
 
+echo "Verifying CUDA libraries..."
+for lib in libcublas.so.11 libcublasLt.so.11 libcudnn.so.8; do
+    if [ ! -f "/usr/lib/x86_64-linux-gnu/$lib" ]; then
+        echo "✗ Missing $lib. Attempting to create symlink..."
+        source=$(find /usr -name "$lib" | head -n 1)
+        if [ -n "$source" ]; then
+            ln -sf "$source" "/usr/lib/x86_64-linux-gnu/$lib"
+            echo "✓ Created symlink for $lib"
+        else
+            echo "✗ Could not find $lib"
+        fi
+    else
+        echo "✓ Found $lib"
+    fi
+done
+
 # Update LD_LIBRARY_PATH to include all possible CUDA library locations
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu
 
