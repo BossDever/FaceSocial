@@ -166,6 +166,86 @@ async def compare_faces_multiple(request: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error comparing faces: {str(e)}")
 
+@router.post("/compare-top-n", response_model=FaceComparisonResponse)
+async def compare_faces_top_n(request: dict):
+    """
+    Compare a face with multiple reference faces using Top-N Average method.
+    
+    Parameters:
+    - query_face: Base64 encoded query face image
+    - reference_faces: List of base64 encoded reference face images
+    - top_n: Number of best matches to use for average (default: 3)
+    - threshold: Similarity threshold to determine if same person (default: 0.65)
+    
+    Returns:
+    - similarity: Top-N Average similarity score between faces (0-1)
+    - is_same_person: Whether the faces belong to the same person
+    - threshold_used: Threshold used for determining if same person
+    - processing_time_ms: Processing time in milliseconds
+    """
+    try:
+        start_time = time.time()
+        
+        # Validate request
+        if 'query_face' not in request or 'reference_faces' not in request:
+            raise HTTPException(status_code=400, detail="Must provide query_face and reference_faces")
+        
+        if not isinstance(request['reference_faces'], list) or len(request['reference_faces']) == 0:
+            raise HTTPException(status_code=400, detail="reference_faces must be a non-empty list")
+        
+        # Get top_n parameter (default: 3)
+        top_n = request.get('top_n', 3)
+        if not isinstance(top_n, int) or top_n <= 0:
+            raise HTTPException(status_code=400, detail="top_n must be a positive integer")
+        
+        # Get threshold parameter (default: 0.65)
+        threshold = request.get('threshold', DEFAULT_SIMILARITY_THRESHOLD)
+        
+        # Decode query face
+        query_base64 = request['query_face']
+        query_image_data = base64.b64decode(query_base64)
+        query_nparr = np.frombuffer(query_image_data, np.uint8)
+        query_image = cv2.imdecode(query_nparr, cv2.IMREAD_COLOR)
+        
+        if query_image is None:
+            raise HTTPException(status_code=400, detail="Invalid query image data")
+        
+        # Generate embedding for query face
+        query_embedding = face_embedder.generate_embedding(query_image)
+        
+        # Decode and generate embeddings for all reference faces
+        reference_embeddings = []
+        for ref_base64 in request['reference_faces']:
+            ref_image_data = base64.b64decode(ref_base64)
+            ref_nparr = np.frombuffer(ref_image_data, np.uint8)
+            ref_image = cv2.imdecode(ref_nparr, cv2.IMREAD_COLOR)
+            
+            if ref_image is not None:
+                ref_embedding = face_embedder.generate_embedding(ref_image)
+                reference_embeddings.append(ref_embedding)
+        
+        # Calculate Top-N Average similarity
+        similarity = face_embedder.calculate_top_n_average_similarity(
+            query_embedding, 
+            reference_embeddings,
+            top_n=top_n
+        )
+        
+        # Determine if same person based on threshold
+        is_same_person = similarity >= threshold
+        
+        processing_time = (time.time() - start_time) * 1000  # Convert to ms
+        
+        return {
+            "similarity": similarity,
+            "is_same_person": is_same_person,
+            "threshold_used": threshold,
+            "processing_time_ms": processing_time
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error comparing faces: {str(e)}")
+
 @router.post("/identify", response_model=FaceIdentificationResponse)
 async def identify_face(request: FaceIdentificationRequest):
     """
