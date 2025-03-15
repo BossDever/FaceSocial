@@ -254,3 +254,73 @@ class FaceEmbedder:
         )
         
         return float(quality_score)
+    def average_embeddings(self, embeddings: List[np.ndarray]) -> np.ndarray:
+    """
+    Average multiple face embeddings.
+    
+    Parameters:
+    - embeddings: List of face embeddings
+    
+    Returns:
+    - Average embedding vector
+    """
+    if not embeddings:
+        raise ValueError("No embeddings provided")
+    
+    # Ensure all embeddings are normalized
+    normalized_embeddings = []
+    for emb in embeddings:
+        if np.linalg.norm(emb) > 0:
+            normalized_embeddings.append(emb / np.linalg.norm(emb))
+        else:
+            normalized_embeddings.append(emb)
+    
+    # Calculate average
+    avg_embedding = np.mean(normalized_embeddings, axis=0)
+    
+    # Normalize the average
+    if np.linalg.norm(avg_embedding) > 0:
+        avg_embedding = avg_embedding / np.linalg.norm(avg_embedding)
+    
+    return avg_embedding
+
+def calculate_similarity_with_multiple(self, embedding: np.ndarray, target_embeddings: List[np.ndarray]) -> float:
+    """
+    Calculate similarity between one embedding and multiple target embeddings.
+    Returns the maximum similarity score.
+    
+    Parameters:
+    - embedding: Face embedding to compare
+    - target_embeddings: List of target face embeddings
+    
+    Returns:
+    - Maximum similarity score (0-1, higher is more similar)
+    """
+    if not target_embeddings:
+        return 0.0
+    
+    # Calculate similarity with each target embedding
+    similarities = [self.calculate_similarity(embedding, target_emb) for target_emb in target_embeddings]
+    
+    # Return maximum similarity
+    return max(similarities)
+
+def calculate_similarity_with_average(self, embedding: np.ndarray, target_embeddings: List[np.ndarray]) -> float:
+    """
+    Calculate similarity between one embedding and the average of multiple target embeddings.
+    
+    Parameters:
+    - embedding: Face embedding to compare
+    - target_embeddings: List of target face embeddings
+    
+    Returns:
+    - Similarity score with the average embedding (0-1, higher is more similar)
+    """
+    if not target_embeddings:
+        return 0.0
+    
+    # Calculate average embedding
+    avg_embedding = self.average_embeddings(target_embeddings)
+    
+    # Calculate similarity with the average embedding
+    return self.calculate_similarity(embedding, avg_embedding)
