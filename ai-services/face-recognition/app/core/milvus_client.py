@@ -268,12 +268,12 @@ class MilvusClient:
         Returns:
         - True if successful, False otherwise
         """
-    collection_name = collection_name or self.default_collection_name
+        collection_name = collection_name or self.default_collection_name
     
-    if not self.connected:
+        if not self.connected:
         # Use placeholder storage
-        if collection_name not in self.placeholder_storage:
-            return False
+            if collection_name not in self.placeholder_storage:
+                return False
         
         before_count = len(self.placeholder_storage[collection_name])
         self.placeholder_storage[collection_name] = [
