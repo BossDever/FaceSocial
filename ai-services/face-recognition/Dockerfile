@@ -69,6 +69,21 @@ RUN apt-get update && apt-get install -y \
     libcudnn8* \
     && rm -rf /var/lib/apt/lists/*
 
+# Add our CUDA setup tools
+RUN mkdir -p /app/tools
+COPY app/tools/cuda_setup.py /app/tools/
+RUN chmod +x /app/tools/cuda_setup.py
+
+# Find CUDA library locations for debugging
+RUN echo "==== CUDA Library Locations ====" && \
+    find /usr/ -name "libcublas.so*" || true && \
+    find /usr/ -name "libcublasLt.so*" || true && \
+    find /usr/ -name "libcudnn.so*" || true && \
+    echo "================================"
+
+# Run CUDA setup during image build to ensure proper symbolic links
+RUN python /app/tools/cuda_setup.py
+
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \

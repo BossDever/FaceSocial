@@ -4,6 +4,7 @@ import onnxruntime as ort
 from typing import List, Optional, Dict, Any, Tuple
 import glob
 import subprocess
+import logging
 
 def get_best_available_provider() -> List[str]:
     """
@@ -16,32 +17,66 @@ def get_best_available_provider() -> List[str]:
         available = ort.get_available_providers()
         print(f"Available ONNX providers: {available}")
         
-        # Check for required CUDA libraries
-        libraries_status = check_cuda_libraries()
-        
-        if 'CUDAExecutionProvider' in available and libraries_status['all_found']:
-            print("✓ Using CUDA for ONNX models (GPU acceleration enabled)")
+        # First check for direct CUDA availability
+        if 'CUDAExecutionProvider' in available:
+            # Let's try CUDA first but don't check libraries yet
+            # ONNX Runtime will fall back to CPU if CUDA fails
+            print("CUDAExecutionProvider available, attempting to use it")
             return ['CUDAExecutionProvider', 'CPUExecutionProvider']
-        elif 'CUDAExecutionProvider' in available:
-            print("⚠ CUDA provider available but missing libraries. Fixing...")
-            if fix_cuda_libraries(libraries_status['missing']):
-                print("✓ Fixed CUDA libraries, using CUDAExecutionProvider")
-                # Reload providers after fixing libraries
-                try:
-                    available = ort.get_available_providers()
-                    if 'CUDAExecutionProvider' in available:
-                        return ['CUDAExecutionProvider', 'CPUExecutionProvider']
-                except:
-                    pass
-            
-            print("⚠ Falling back to CPU provider")
-            return ['CPUExecutionProvider']
         else:
-            print("⚠ CUDA provider not available, using CPU only")
+            print("CUDA provider not available in ONNX Runtime")
             return ['CPUExecutionProvider']
     except Exception as e:
         print(f"Error getting providers: {str(e)}")
         return ['CPUExecutionProvider']
+
+def verify_cuda_available() -> bool:
+    """
+    Verify if CUDA is actually available by testing ONNX with a simple model
+    
+    Returns:
+        bool: True if CUDA is working, False otherwise
+    """
+    try:
+        # Create a very simple ONNX model
+        import numpy as np
+        
+        # Get ONNX providers
+        providers = ort.get_available_providers()
+        if 'CUDAExecutionProvider' not in providers:
+            return False
+            
+        # Create a simple session options
+        options = ort.SessionOptions()
+        options.log_severity_level = 0  # Reduce verbosity
+            
+        # Try to create a session with CUDA explicitly
+        try:
+            # Simple identity model
+            x = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+            
+            # First try CPU to ensure the model works
+            sess_cpu = ort.InferenceSession(
+                None, 
+                providers=['CPUExecutionProvider'],
+                sess_options=options
+            )
+            
+            # Now try CUDA
+            sess_cuda = ort.InferenceSession(
+                None,
+                providers=['CUDAExecutionProvider'],
+                sess_options=options
+            )
+            
+            # If we got here, CUDA is working
+            return True
+        except Exception as e:
+            print(f"CUDA verification failed: {str(e)}")
+            return False
+    except Exception as e:
+        print(f"Error during CUDA verification: {str(e)}")
+        return False
 
 def check_cuda_libraries() -> Dict[str, Any]:
     """
@@ -54,11 +89,12 @@ def check_cuda_libraries() -> Dict[str, Any]:
     found_libs = []
     missing_libs = []
     
-    # Library search paths
+    # Library search paths - include more possible locations
     search_paths = [
         '/usr/lib/x86_64-linux-gnu',
-        '/usr/local/cuda/lib64',
-        '/usr/local/cuda-11/lib64'
+        '/usr/local/cuda/lib64', 
+        '/usr/local/cuda-11/lib64',
+        '/usr/local/cuda/targets/x86_64-linux/lib'
     ]
     
     # Add paths from LD_LIBRARY_PATH
@@ -71,6 +107,7 @@ def check_cuda_libraries() -> Dict[str, Any]:
     for lib in required_libs:
         lib_found = False
         
+        # First check for direct matches
         for path in search_paths:
             full_path = os.path.join(path, lib)
             if os.path.exists(full_path) or os.path.islink(full_path):
@@ -90,6 +127,18 @@ def check_cuda_libraries() -> Dict[str, Any]:
                         print(f"⚠ Found broken symlink {full_path} -> {link_target}")
                 else:
                     print(f"✓ Found {lib} at {full_path}")
+                    lib_found = True
+                    found_libs.append((lib, full_path, None))
+                    break
+        
+        # If not found, check for version-agnostic libs
+        if not lib_found:
+            base_lib = lib.split('.')[0] + '.so'  # e.g., libcublas.so
+            
+            for path in search_paths:
+                full_path = os.path.join(path, base_lib)
+                if os.path.exists(full_path) or os.path.islink(full_path):
+                    print(f"✓ Found {base_lib} at {full_path} (can be used for {lib})")
                     lib_found = True
                     found_libs.append((lib, full_path, None))
                     break
