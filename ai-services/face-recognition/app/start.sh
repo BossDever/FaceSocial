@@ -3,6 +3,40 @@
 # Enhanced CUDA library setup for ONNX Runtime GPU acceleration
 echo "Setting up CUDA libraries for ONNX Runtime..."
 
+# Run emergency CUDA fix first
+echo "Running Emergency CUDA Fix..."
+python /app/tools/emergency_cuda_fix.py
+
+# Make sure the symlinks are created (explicit commands)
+echo "Ensuring critical CUDA symlinks exist..."
+
+# Directly create symlinks for critical libraries
+CUDA_DIR="/usr/lib/x86_64-linux-gnu"
+CUDA12_DIR="$CUDA_DIR"
+
+# Create symlinks from CUDA 12 to CUDA 11 libraries
+if [ -f "$CUDA12_DIR/libcublas.so.12" ]; then
+    ln -sf "$CUDA12_DIR/libcublas.so.12" "$CUDA_DIR/libcublas.so.11"
+    echo "Created symlink: $CUDA12_DIR/libcublas.so.12 -> $CUDA_DIR/libcublas.so.11"
+fi
+
+if [ -f "$CUDA12_DIR/libcublasLt.so.12" ]; then
+    ln -sf "$CUDA12_DIR/libcublasLt.so.12" "$CUDA_DIR/libcublasLt.so.11"
+    echo "Created symlink: $CUDA12_DIR/libcublasLt.so.12 -> $CUDA_DIR/libcublasLt.so.11"
+fi
+
+# Update LD_LIBRARY_PATH to include all possible CUDA library locations
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu
+
+# Verify critical libraries exist
+echo "Verifying critical CUDA libraries..."
+ls -la "$CUDA_DIR/libcublas.so.11" "$CUDA_DIR/libcublasLt.so.11" || echo "WARNING: Libraries not found"
+
+# Show all CUDA libraries
+echo "=== Available CUDA Libraries ==="
+find /usr/lib/x86_64-linux-gnu -name "libcublas*" -o -name "libcudnn*"
+echo "=============================="
+
 # Function to find CUDA libraries with more specific patterns
 find_library() {
     local lib_name=$1
@@ -200,21 +234,13 @@ for lib in "${critical_libs[@]}"; do
                     echo "Created mapping: $source -> /usr/lib/x86_64-linux-gnu/$lib"
                 else
                     echo "❌ Could not find any suitable library for $lib"
-                fi
+                }
             fi
         fi
     else
         echo "✅ Found critical library: $lib"
     fi
 done
-
-# Update LD_LIBRARY_PATH to include all possible CUDA library locations
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu
-
-# Show all CUDA libraries
-echo "=== Available CUDA Libraries ==="
-find /usr/lib/x86_64-linux-gnu -name "libcublas*" -o -name "libcudnn*"
-echo "=============================="
 
 # Run the CUDA manager to ensure proper setup
 python /app/tools/cuda_manager.py
