@@ -429,11 +429,15 @@ def calculate_confidence_level(similarity: float, threshold: float, gender_warni
     margin = similarity - threshold
     
     if gender_warning:
-        # Lower confidence if gender mismatch
-        if margin >= 0.1:
-            return "MEDIUM"
+        # Lower confidence significantly if gender mismatch
+        if margin >= 0.15:
+            return "MEDIUM"  # ลดจาก VERY HIGH
+        elif margin >= 0.08:
+            return "LOW"     # ลดจาก HIGH
+        elif margin >= 0.03:
+            return "LOW"     # ลดจาก MEDIUM
         elif margin >= 0:
-            return "LOW"
+            return "VERY LOW"  # ลดจาก LOW
         else:
             return "VERY LOW"
     else:
@@ -691,7 +695,7 @@ async def ensemble_compare_faces(request: dict):
             
             # Collect model-specific details
             for model_name, similarity in similarity_result["model_similarities"].items():
-                if model_name not in model_details:
+                if (model_name not in model_details):
                     model_details[model_name] = []
                 model_details[model_name].append(similarity)
         
