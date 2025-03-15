@@ -296,7 +296,7 @@ class MilvusClient:
             
             # Delete by ID
             quoted_ids = [f'"{id}"' for id in embedding_ids]
-            collection.delete(expr)
+            expr = f"id in [{', '.join(quoted_ids)}]"
             
             print(f"Deleted {len(embedding_ids)} embeddings from Milvus.")
             return True
