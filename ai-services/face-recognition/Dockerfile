@@ -15,11 +15,8 @@ ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/targe
 RUN mkdir -p /app/tools
 
 # Create tools directory and copy setup scripts
-COPY app/tools/emergency_cuda_fix.py /app/tools/
-COPY app/tools/cuda_setup.py /app/tools/
-COPY app/tools/cuda_manager.py /app/tools/
-COPY app/start.sh /app/start.sh
-RUN chmod +x /app/tools/*.py /app/start.sh
+COPY app/tools/cuda_libraries_fix.sh /app/tools/
+RUN chmod +x /app/tools/*.sh
 
 # Install Python packages
 RUN pip install --no-cache-dir \
