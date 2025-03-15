@@ -665,7 +665,7 @@ async def ensemble_compare_faces(request: dict):
             
             # Collect model-specific details
             for model_name, similarity in similarity_result["model_similarities"].items():
-                if model_name not in model_details:
+                if (model_name not in model_details):
                     model_details[model_name] = []
                 model_details[model_name].append(similarity)
         
@@ -1278,10 +1278,45 @@ async def face_recognition_demo_multiple():
             .confidence-medium { color: #f39c12; }
             .confidence-low { color: #e67e22; }
             .confidence-verylow { color: #e74c3c; }
+            .model-info {
+                margin-top: 20px;
+                padding: 15px;
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                border: 1px solid #dee2e6;
+            }
+            .model-badge {
+                display: inline-block;
+                padding: 3px 8px;
+                margin: 2px;
+                border-radius: 12px;
+                font-size: 12px;
+                color: white;
+                background-color: #6c757d;
+            }
+            .model-facenet { background-color: #007bff; }
+            .model-arcface { background-color: #28a745; }
+            .model-cosface { background-color: #fd7e14; }
+            .refresh-btn {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 12px;
+            }
+            .refresh-btn:hover { background-color: #5a6268; }
         </style>
     </head>
     <body>
         <h1>Face Recognition with Multiple Reference Faces</h1>
+        
+        <!-- Model Info Section -->
+        <div class="model-info" id="models-info">
+            <h3>Models Status <button class="refresh-btn" onclick="checkModelsStatus()">Refresh</button></h3>
+            <p>Loading model information...</p>
+        </div>
         
         <div class="container">
             <div class="card">
@@ -1538,38 +1573,173 @@ async def face_recognition_demo_multiple():
                         } else {
                             log(`Comparison complete: similarity = ${data.similarity.toFixed(4)}`);
                             
-                            // Determine similarity class for styling
-                            let similarityClass = getSimilarityClass(data.similarity);
-                            
-                            // Display method used in a user-friendly way
-                            let methodDisplay = "Unknown";
-                            if (method === 'max') methodDisplay = "Maximum Similarity";
-                            else if (method === 'average') methodDisplay = "Average Similarity";
-                            else if (method === 'top_n') methodDisplay = "Top-3 Average Similarity";
-                            
-                            // Display results
-                            document.getElementById('comparison-result').innerHTML = `
-                                <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
-                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
-                                <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
-                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
-                                <p><strong>Method Used:</strong> ${methodDisplay}</p>
-                                <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>
-                            `;
-                        }
-                    };
-                    
-                    queryReader.readAsDataURL(queryFileInput.files[0]);
-                    
-                } catch (error) {
-                    log(`ERROR: ${error.message}`);
-                    document.getElementById('comparison-result').innerHTML = `
-                        <p style="color: red;">Error: ${error.message}</p>
-                    `;
-                }
-            }
-        </script>
-    </body>
-    </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    return HTMLResponse(content=html_content)    """    </html>    </body>        </script>            });                checkModelsStatus();                // Check model status                                // ...                // Original initialization code            document.addEventListener('DOMContentLoaded', function() {            // Call when page loads                        }                    });                             <p>Error loading model information: ${error}</p>`;                            `<h3>Models Status <button class="refresh-btn" onclick="checkModelsStatus()">Refresh</button></h3>                        document.getElementById('models-info').innerHTML =                         console.error('Error checking models status:', error);                    .catch(error => {                    })                        modelsInfo.innerHTML = content;                                                }                            content += '</p>';                            content += data.onnx_providers.join(', ');                            content += '<p><strong>ONNX Providers:</strong> ';                        if (data.onnx_providers && data.onnx_providers.length > 0) {                        // ONNX providers                                                content += `<p><strong>Using Ensemble:</strong> ${data.use_ensemble ? 'Yes ✓' : 'No ✗'}</p>`;                                                }                            content += '</ul>';                            }                                content += `<li>${name}: ${weight.toFixed(2)}</li>`;                            for (const [name, weight] of Object.entries(data.model_weights)) {                            content += '<p><strong>Model Weights:</strong></p><ul>';                        if (Object.keys(data.model_weights).length > 0) {                        // Weights                                                }                            }                                content += '</ul>';                                }                                    content += `<li>${file}</li>`;                                for (const file of data.model_files_found) {                                content += '<p><strong>Model Files Found:</strong></p><ul>';                            if (data.model_files_found && data.model_files_found.length > 0) {                            // Show files found to help with debugging                                                        content += '<span class="model-badge" style="background-color: #dc3545;">None loaded</span></p>';                        } else {                            content += '</ul>';                            }                                           Type: ${info.type}, Dim: ${info.dim}, Path: ${info.path}</li>`;                                content += `<li><span class="model-badge model-${name}">${name}</span>                             for (const [name, info] of Object.entries(data.ensemble_models)) {                            content += '<ul>';                            content += `<span class="model-badge">${Object.keys(data.ensemble_models).length} loaded</span></p>`;                        if (Object.keys(data.ensemble_models).length > 0) {                        content += '<p><strong>Ensemble Models:</strong> ';                        // Ensemble models                                                content += '</p>';                        }                            content += ` - Path: ${data.facenet.path}`;                        if (data.facenet.path) {                                    (${data.facenet.type || 'unknown'})`;                        content += `<p><strong>FaceNet:</strong> ${data.facenet.loaded ? 'Loaded ✓' : 'Not loaded ✗'}                         // FaceNet status                                                let content = '<h3>Models Status <button class="refresh-btn" onclick="checkModelsStatus()">Refresh</button></h3>';                        let modelsInfo = document.getElementById('models-info');                    .then(data => {                    .then(response => response.json())                fetch('/v1/face/models-status')            function checkModelsStatus() {            // Add model status checking function            }                }                    `;                        <p style="color: red;">Error: ${error.message}</p>                    document.getElementById('comparison-result').innerHTML = `                    log(`ERROR: ${error.message}`);                } catch (error) {                                        queryReader.readAsDataURL(queryFileInput.files[0]);                                        };                        }                            `;                                <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>                                <p><strong>Method Used:</strong> ${methodDisplay}</p>                                <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>                                <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>                                <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>                                <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>                            document.getElementById('comparison-result').innerHTML = `                            // Display results                                                        else if (method === 'top_n') methodDisplay = "Top-3 Average Similarity";                            else if (method === 'average') methodDisplay = "Average Similarity";                            if (method === 'max') methodDisplay = "Maximum Similarity";                            let methodDisplay = "Unknown";                            // Display method used in a user-friendly way                                                        let similarityClass = getSimilarityClass(data.similarity);                            // Determine similarity class for styling
+@router.get("/models-status")
+async def models_status():
     """
-    return HTMLResponse(content=html_content)
+    Show status of all face recognition models.
+    """
+    # Check FaceNet
+    facenet_status = {"loaded": False, "path": None}
+    if hasattr(face_embedder, 'model_type'):
+        facenet_status["loaded"] = True
+        facenet_status["type"] = face_embedder.model_type
+        facenet_status["path"] = face_embedder.model_path
+    
+    # Check ensemble models
+    ensemble_models = {}
+    if hasattr(face_embedder, 'ensemble') and hasattr(face_embedder.ensemble, 'models'):
+        for model_name, model_info in face_embedder.ensemble.models.items():
+            ensemble_models[model_name] = {
+                "type": model_info.get("type", "unknown"),
+                "dim": model_info.get("dim", "unknown"),
+                "path": model_info.get("path", "unknown")
+            }
+    
+    # Check weights
+    weights = {}
+    if hasattr(face_embedder, 'ensemble') and hasattr(face_embedder.ensemble, 'model_weights'):
+        weights = face_embedder.ensemble.model_weights
+    
+    # Search for model files
+    model_files = []
+    search_paths = [
+        '/app/models', 
+        '/app/app/models', 
+        '/home/suwit/FaceSocial/ai-services/face-recognition/app/models'
+    ]
+    
+    for base_path in search_paths:
+        if os.path.exists(base_path):
+            for root, dirs, files in os.walk(base_path):
+                for file in files:
+                    if file.endswith(('.onnx', '.pb', '.h5')):
+                        model_files.append(os.path.join(root, file))
+    
+    # Check ONNX providers
+    onnx_providers = []
+    try:
+        import onnxruntime as ort
+        onnx_providers = ort.get_available_providers()
+    except Exception as e:
+        onnx_providers = [f"Error getting providers: {str(e)}"]
+    
+    return {
+        "facenet": facenet_status,
+        "ensemble_models": ensemble_models,
+        "model_weights": weights,
+        "use_ensemble": face_embedder.use_ensemble if hasattr(face_embedder, 'use_ensemble') else False,
+        "model_files_found": model_files,
+        "onnx_providers": onnx_providers
+    }
