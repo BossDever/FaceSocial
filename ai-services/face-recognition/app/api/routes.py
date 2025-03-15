@@ -1278,10 +1278,18 @@ async def face_recognition_demo_multiple():
             .confidence-medium { color: #f39c12; }
             .confidence-low { color: #e67e22; }
             .confidence-verylow { color: #e74c3c; }
+            .models-info { margin-top: 20px; padding: 15px; background: #eff8ff; border: 1px solid #d0e8ff; border-radius: 8px; }
+            .models-info ul { margin-top: 5px; }
+            .models-info li { margin-bottom: 3px; }
         </style>
     </head>
     <body>
         <h1>Face Recognition with Multiple Reference Faces</h1>
+        
+        <!-- Add a new section for models information -->
+        <div class="models-info" id="models-info">
+            <p>Loading models information...</p>
+        </div>
         
         <div class="container">
             <div class="card">
@@ -1324,6 +1332,58 @@ async def face_recognition_demo_multiple():
             // Global variables
             const maxFaces = 5;
             let referenceFaces = [];
+            
+            // Function to check and display models status
+            function checkModelsStatus() {
+                fetch('/v1/face/models-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        let modelsInfo = document.getElementById('models-info');
+                        let content = '<h3>Models Status</h3>';
+                        
+                        // FaceNet status
+                        content += `<p><strong>FaceNet:</strong> ${data.facenet.loaded ? 'Loaded ✓' : 'Not loaded ✗'}`;
+                        if (data.facenet.type) {
+                            content += ` (${data.facenet.type})`;
+                        }
+                        content += '</p>';
+                        
+                        // Ensemble models
+                        content += '<p><strong>Ensemble Models:</strong> ';
+                        if (Object.keys(data.ensemble_models).length > 0) {
+                            content += '</p><ul>';
+                            for (const [name, info] of Object.entries(data.ensemble_models)) {
+                                content += `<li>${name}: ${info.type}, Dim=${info.dim}</li>`;
+                            }
+                            content += '</ul>';
+                        } else {
+                            content += 'No ensemble models loaded</p>';
+                        }
+                        
+                        // Weights
+                        if (Object.keys(data.model_weights).length > 0) {
+                            content += '<p><strong>Model Weights:</strong></p><ul>';
+                            for (const [name, weight] of Object.entries(data.model_weights)) {
+                                content += `<li>${name}: ${weight.toFixed(2)}</li>`;
+                            }
+                            content += '</ul>';
+                        }
+                        
+                        content += `<p><strong>Using Ensemble:</strong> ${data.use_ensemble ? 'Yes ✓' : 'No ✗'}</p>`;
+                        
+                        modelsInfo.innerHTML = content;
+                    })
+                    .catch(error => {
+                        console.error('Error checking models status:', error);
+                        let modelsInfo = document.getElementById('models-info');
+                        modelsInfo.innerHTML = '<h3>Models Status</h3><p style="color:red;">Error loading model information</p>';
+                    });
+            }
+            
+            // Call when page loads
+            document.addEventListener('DOMContentLoaded', function() {
+                checkModelsStatus();
+            });
             
             // Preview image function
             function previewImage(inputId, previewId) {
