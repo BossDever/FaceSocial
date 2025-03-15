@@ -20,15 +20,6 @@ class ModelEnsemble:
         - base_model_path: Base path to the models directory
         """
         self.base_path = base_model_path
-        print(f"Initializing ModelEnsemble with base path: {base_model_path}")
-        
-        # List all files in model directory tree
-        if os.path.exists(base_model_path):
-            for root, dirs, files in os.walk(base_model_path):
-                print(f"Models directory {root} contains: {files}")
-        else:
-            print(f"Models base path does not exist: {base_model_path}")
-        
         self.models = {}
         self.model_weights = {}
         
@@ -47,142 +38,83 @@ class ModelEnsemble:
         # Initialize model weights
         self._init_weights()
         
-        print(f"Loaded {len(self.models)} models for ensemble: {list(self.models.keys())}")
+        print(f"Loaded {len(self.models)} models for ensemble")
     
     def _load_facenet(self):
         """Load FaceNet model if available"""
-        # Define multiple possible paths for the FaceNet model
-        possible_paths = [
-            os.path.join(self.base_path, 'facenet/20180402-114759.pb'),
-            os.path.join(self.base_path, 'keras-facenet-h5/facenet_keras.h5'),
-            '/app/models/facenet/20180402-114759.pb',
-            '/app/app/models/facenet/20180402-114759.pb',
-            './models/facenet/20180402-114759.pb'
-        ]
+        # Try to load TensorFlow FaceNet model
+        facenet_pb_path = os.path.join(self.base_path, 'facenet/20180402-114759.pb')
+        keras_facenet_path = os.path.join(self.base_path, 'keras-facenet-h5/facenet_keras.h5')
         
-        # Try loading TensorFlow FaceNet model
-        for facenet_pb_path in possible_paths:
-            if os.path.exists(facenet_pb_path) and facenet_pb_path.endswith('.pb'):
-                print(f"Found FaceNet TensorFlow model at: {facenet_pb_path}")
-                try:
-                    with tf.Graph().as_default() as graph:
-                        with tf.io.gfile.GFile(facenet_pb_path, 'rb') as f:
-                            graph_def = tf.compat.v1.GraphDef()
-                            graph_def.ParseFromString(f.read())
-                            tf.import_graph_def(graph_def, name='')
+        if os.path.exists(facenet_pb_path):
+            try:
+                with tf.Graph().as_default() as graph:
+                    with tf.io.gfile.GFile(facenet_pb_path, 'rb') as f:
+                        graph_def = tf.compat.v1.GraphDef()
+                        graph_def.ParseFromString(f.read())
+                        tf.import_graph_def(graph_def, name='')
 
-                        # Get input and output tensors
-                        self.facenet_input = graph.get_tensor_by_name('input:0')
-                        self.facenet_embeddings = graph.get_tensor_by_name('embeddings:0')
-                        self.facenet_phase_train = graph.get_tensor_by_name('phase_train:0')
+                    # Get input and output tensors
+                    self.facenet_input = graph.get_tensor_by_name('input:0')
+                    self.facenet_embeddings = graph.get_tensor_by_name('embeddings:0')
+                    self.facenet_phase_train = graph.get_tensor_by_name('phase_train:0')
 
-                        # Create a session
-                        config = tf.compat.v1.ConfigProto()
-                        config.gpu_options.allow_growth = True
-                        self.facenet_sess = tf.compat.v1.Session(graph=graph, config=config)
-                    
-                    self.models['facenet'] = {
-                        'type': 'tf_graph', 
-                        'dim': 128,
-                        'path': facenet_pb_path
-                    }
-                    print("Loaded FaceNet TensorFlow model successfully")
-                    return
-                except Exception as e:
-                    print(f"Error loading FaceNet TensorFlow model from {facenet_pb_path}: {str(e)}")
+                    # Create a session
+                    config = tf.compat.v1.ConfigProto()
+                    config.gpu_options.allow_growth = True
+                    self.facenet_sess = tf.compat.v1.Session(graph=graph, config=config)
+                
+                self.models['facenet'] = {'type': 'tf_graph', 'dim': 128}
+                print("Loaded FaceNet TensorFlow model")
+            except Exception as e:
+                print(f"Error loading FaceNet TensorFlow model: {str(e)}")
         
         # Try loading Keras FaceNet if TF model failed
-        for keras_facenet_path in possible_paths:
-            if os.path.exists(keras_facenet_path) and keras_facenet_path.endswith('.h5'):
-                print(f"Found FaceNet Keras model at: {keras_facenet_path}")
-                try:
-                    model = tf.keras.models.load_model(keras_facenet_path)
-                    self.models['facenet'] = {
-                        'type': 'keras', 
-                        'model': model, 
-                        'dim': 128,
-                        'path': keras_facenet_path
-                    }
-                    print("Loaded FaceNet Keras model successfully")
-                    return
-                except Exception as e:
-                    print(f"Error loading FaceNet Keras model from {keras_facenet_path}: {str(e)}")
-        
-        print("Failed to load FaceNet model from any location")
+        elif os.path.exists(keras_facenet_path):
+            try:
+                model = tf.keras.models.load_model(keras_facenet_path)
+                self.models['facenet'] = {'type': 'keras', 'model': model, 'dim': 128}
+                print("Loaded FaceNet Keras model")
+            except Exception as e:
+                print(f"Error loading FaceNet Keras model: {str(e)}")
     
     def _load_arcface(self):
         """Load ArcFace model if available"""
-        # Define multiple possible paths for the ArcFace model
-        possible_paths = [
-            os.path.join(self.base_path, 'arcface/arcface.onnx'),
-            '/app/models/arcface/arcface.onnx',
-            '/app/app/models/arcface/arcface.onnx',
-            './models/arcface/arcface.onnx'
-        ]
+        arcface_path = os.path.join(self.base_path, 'arcface/arcface.onnx')
         
-        for arcface_path in possible_paths:
-            if os.path.exists(arcface_path):
-                try:
-                    print(f"Found ArcFace model at: {arcface_path}")
-                    # Get available providers
-                    providers = ort.get_available_providers()
-                    print(f"Available ONNX providers: {providers}")
-                    
-                    # Try with all available providers
-                    session = ort.InferenceSession(arcface_path, providers=providers)
-                    
-                    # Store session
-                    self.models['arcface'] = {
-                        'type': 'onnx',
-                        'session': session,
-                        'dim': 512,  # ArcFace typically has 512-dimensional embeddings
-                        'path': arcface_path
-                    }
-                    print("Loaded ArcFace ONNX model successfully")
-                    return  # Exit once loaded successfully
-                except Exception as e:
-                    print(f"Error loading ArcFace model from {arcface_path}: {str(e)}")
-        
-        print("Failed to load ArcFace model from any location")
+        if os.path.exists(arcface_path):
+            try:
+                # Create ONNX Runtime session
+                session = ort.InferenceSession(arcface_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+                
+                # Store session
+                self.models['arcface'] = {
+                    'type': 'onnx',
+                    'session': session,
+                    'dim': 512  # ArcFace typically has 512-dimensional embeddings
+                }
+                print("Loaded ArcFace ONNX model")
+            except Exception as e:
+                print(f"Error loading ArcFace model: {str(e)}")
     
     def _load_cosface(self):
         """Load CosFace model if available"""
-        # Define multiple possible paths for the CosFace model
-        possible_paths = [
-            os.path.join(self.base_path, 'cosface/glint360k_cosface_r50.onnx'),
-            '/app/models/cosface/glint360k_cosface_r50.onnx',
-            '/app/app/models/cosface/glint360k_cosface_r50.onnx',
-            './models/cosface/glint360k_cosface_r50.onnx',
-            # Add alternative cosface model filenames
-            os.path.join(self.base_path, 'cosface/cosface.onnx'),
-            '/app/models/cosface/cosface.onnx',
-            '/app/app/models/cosface/cosface.onnx',
-            './models/cosface/cosface.onnx'
-        ]
+        cosface_path = os.path.join(self.base_path, 'cosface/glint360k_cosface_r50.onnx')
         
-        for cosface_path in possible_paths:
-            if os.path.exists(cosface_path):
-                try:
-                    print(f"Found CosFace model at: {cosface_path}")
-                    # Get available providers
-                    providers = ort.get_available_providers()
-                    
-                    # Try with all available providers
-                    session = ort.InferenceSession(cosface_path, providers=providers)
-                    
-                    # Store session
-                    self.models['cosface'] = {
-                        'type': 'onnx',
-                        'session': session,
-                        'dim': 512,  # CosFace typically has 512-dimensional embeddings
-                        'path': cosface_path
-                    }
-                    print("Loaded CosFace ONNX model successfully")
-                    return  # Exit once loaded successfully
-                except Exception as e:
-                    print(f"Error loading CosFace model from {cosface_path}: {str(e)}")
-        
-        print("Failed to load CosFace model from any location")
+        if os.path.exists(cosface_path):
+            try:
+                # Create ONNX Runtime session
+                session = ort.InferenceSession(cosface_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+                
+                # Store session
+                self.models['cosface'] = {
+                    'type': 'onnx',
+                    'session': session,
+                    'dim': 512  # CosFace typically has 512-dimensional embeddings
+                }
+                print("Loaded CosFace ONNX model")
+            except Exception as e:
+                print(f"Error loading CosFace model: {str(e)}")
     
     def _init_weights(self):
         """Initialize model weights based on available models"""
