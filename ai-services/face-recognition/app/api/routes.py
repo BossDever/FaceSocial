@@ -975,6 +975,7 @@ async def face_recognition_demo_multiple():
                 <select id="comparison-method">
                     <option value="max">Maximum Similarity (Best Match)</option>
                     <option value="average">Average Similarity</option>
+                    <option value="top_n">Top-N Average (N=3)</option>
                 </select>
                 <br>
                 <button onclick="compareWithMultiple()">Compare Face</button>
@@ -1108,15 +1109,25 @@ async def face_recognition_demo_multiple():
                         const referenceBase64List = referenceFaces.map(face => face.base64);
                         const method = document.getElementById('comparison-method').value;
                         
+                        // Determine which API endpoint to call based on the method
+                        let apiEndpoint = '/v1/face/compare-multiple';
+                        let requestBody = {
+                            query_face: queryBase64,
+                            reference_faces: referenceBase64List
+                        };
+                        
+                        if (method === 'top_n') {
+                            apiEndpoint = '/v1/face/compare-top-n';
+                            requestBody.top_n = 3;  // Default to top 3 matches
+                        } else {
+                            requestBody.method = method;
+                        }
+                        
                         // Call API
-                        const response = await fetch('/v1/face/compare-multiple', {
+                        const response = await fetch(apiEndpoint, {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                query_face: queryBase64,
-                                reference_faces: referenceBase64List,
-                                method: method
-                            })
+                            body: JSON.stringify(requestBody)
                         });
                         
                         if (!response.ok) {
@@ -1135,13 +1146,19 @@ async def face_recognition_demo_multiple():
                             similarityClass = 'similarity-med';
                         }
                         
+                        // Display method used in a user-friendly way
+                        let methodDisplay = "Unknown";
+                        if (method === 'max') methodDisplay = "Maximum Similarity";
+                        else if (method === 'average') methodDisplay = "Average Similarity";
+                        else if (method === 'top_n') methodDisplay = "Top-3 Average Similarity";
+                        
                         // Display results
                         document.getElementById('comparison-result').innerHTML = `
                             <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
                             <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
                             <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
                             <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
-                            <p><strong>Method Used:</strong> ${method === 'max' ? 'Maximum Similarity' : 'Average Similarity'}</p>
+                            <p><strong>Method Used:</strong> ${methodDisplay}</p>
                             <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>
                         `;
                     };
