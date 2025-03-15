@@ -271,16 +271,16 @@ class MilvusClient:
         collection_name = collection_name or self.default_collection_name
     
         if not self.connected:
-        # Use placeholder storage
+            # Use placeholder storage
             if collection_name not in self.placeholder_storage:
                 return False
         
-        before_count = len(self.placeholder_storage[collection_name])
-        self.placeholder_storage[collection_name] = [
-            item for item in self.placeholder_storage[collection_name]
-            if item["id"] not in embedding_ids
-        ]
-        after_count = len(self.placeholder_storage[collection_name])
+            before_count = len(self.placeholder_storage[collection_name])
+            self.placeholder_storage[collection_name] = [
+                item for item in self.placeholder_storage[collection_name]
+                if item["id"] not in embedding_ids
+            ]
+            after_count = len(self.placeholder_storage[collection_name])
         
         print(f"Deleted {before_count - after_count} embeddings from placeholder storage.")
         return True
