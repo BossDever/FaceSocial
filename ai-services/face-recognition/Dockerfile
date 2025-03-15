@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
     uvicorn==0.27.0 \
-    opencv-python==4.8.1 \
+    opencv-python==4.8.1.78 \
     mtcnn==0.1.1 \
     scikit-learn==1.3.0 \
     pymilvus==2.3.4 \
