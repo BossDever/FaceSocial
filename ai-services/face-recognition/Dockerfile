@@ -6,12 +6,20 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    # Add CUDA and cuDNN dependencies for ONNX Runtime
-    cuda-cudart-11-* \
-    libcublas-11-* \
-    libcublasLt11 \
-    libcudnn8 \
+    # More specific CUDA dependencies for ONNX Runtime
+    cuda-cudart-11-8 \
+    libcublas-11-8 \
+    libcublaslt-11-8 \
+    libcudnn8=8.6.0* \
     && rm -rf /var/lib/apt/lists/*
+
+# Add library paths to find CUDA libraries
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-11/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu
+
+# Create symbolic links if needed
+RUN ln -sf /usr/lib/x86_64-linux-gnu/libcublasLt.so.11 /usr/lib/x86_64-linux-gnu/libcublasLt.so \
+    && ln -sf /usr/lib/x86_64-linux-gnu/libcublas.so.11 /usr/lib/x86_64-linux-gnu/libcublas.so \
+    && ln -sf /usr/lib/x86_64-linux-gnu/libcudnn.so.8 /usr/lib/x86_64-linux-gnu/libcudnn.so
 
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
