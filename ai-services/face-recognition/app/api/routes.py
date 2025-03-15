@@ -91,16 +91,15 @@ async def generate_embedding(request: FaceEmbeddingRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating embedding: {str(e)}")
 
-@router.post("/compare", response_model=FaceComparisonResponse)
-async def compare_faces(request: FaceComparisonRequest):
+@router.post("/compare-multiple", response_model=FaceComparisonResponse)
+async def compare_faces_multiple(request: dict):
     """
-    Compare two faces and calculate similarity.
+    Compare a face with multiple reference faces and find the best match.
     
     Parameters:
-    - embedding1: First face embedding (optional)
-    - embedding2: Second face embedding (optional)
-    - or_face1: Base64 encoded first face image (alternative to embedding1)
-    - or_face2: Base64 encoded second face image (alternative to embedding2)
+    - query_face: Base64 encoded query face image
+    - reference_faces: List of base64 encoded reference face images
+    - method: Comparison method ("max" or "average")
     
     Returns:
     - similarity: Similarity score between faces (0-1)
@@ -111,44 +110,46 @@ async def compare_faces(request: FaceComparisonRequest):
     try:
         start_time = time.time()
         
-        # Get embeddings - either from request or generate from images
-        embedding1 = None
-        embedding2 = None
+        # Validate request
+        if 'query_face' not in request or 'reference_faces' not in request:
+            raise HTTPException(status_code=400, detail="Must provide query_face and reference_faces")
         
-        if request.embedding1 is not None:
-            embedding1 = np.array(request.embedding1)
-        elif request.or_face1 is not None:
-            # Decode base64 image
-            image_data = base64.b64decode(request.or_face1)
-            nparr = np.frombuffer(image_data, np.uint8)
-            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if image is None:
-                raise HTTPException(status_code=400, detail="Invalid image data for first face")
-            
-            # Generate embedding
-            embedding1 = face_embedder.generate_embedding(image)
-        else:
-            raise HTTPException(status_code=400, detail="Must provide either embedding1 or or_face1")
+        if not isinstance(request['reference_faces'], list) or len(request['reference_faces']) == 0:
+            raise HTTPException(status_code=400, detail="reference_faces must be a non-empty list")
         
-        if request.embedding2 is not None:
-            embedding2 = np.array(request.embedding2)
-        elif request.or_face2 is not None:
-            # Decode base64 image
-            image_data = base64.b64decode(request.or_face2)
-            nparr = np.frombuffer(image_data, np.uint8)
-            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if image is None:
-                raise HTTPException(status_code=400, detail="Invalid image data for second face")
-            
-            # Generate embedding
-            embedding2 = face_embedder.generate_embedding(image)
-        else:
-            raise HTTPException(status_code=400, detail="Must provide either embedding2 or or_face2")
+        # Get method (default: max)
+        method = request.get('method', 'max').lower()
+        if method not in ['max', 'average']:
+            raise HTTPException(status_code=400, detail="method must be 'max' or 'average'")
         
-        # Calculate similarity
-        similarity = face_embedder.calculate_similarity(embedding1, embedding2)
+        # Decode query face
+        query_base64 = request['query_face']
+        query_image_data = base64.b64decode(query_base64)
+        query_nparr = np.frombuffer(query_image_data, np.uint8)
+        query_image = cv2.imdecode(query_nparr, cv2.IMREAD_COLOR)
+        
+        if query_image is None:
+            raise HTTPException(status_code=400, detail="Invalid query image data")
+        
+        # Generate embedding for query face
+        query_embedding = face_embedder.generate_embedding(query_image)
+        
+        # Decode and generate embeddings for all reference faces
+        reference_embeddings = []
+        for ref_base64 in request['reference_faces']:
+            ref_image_data = base64.b64decode(ref_base64)
+            ref_nparr = np.frombuffer(ref_image_data, np.uint8)
+            ref_image = cv2.imdecode(ref_nparr, cv2.IMREAD_COLOR)
+            
+            if ref_image is not None:
+                ref_embedding = face_embedder.generate_embedding(ref_image)
+                reference_embeddings.append(ref_embedding)
+        
+        # Calculate similarity based on method
+        if method == 'max':
+            similarity = max(face_embedder.calculate_similarity(query_embedding, ref_emb) for ref_emb in reference_embeddings)
+        else:  # average
+            similarity = np.mean([face_embedder.calculate_similarity(query_embedding, ref_emb) for ref_emb in reference_embeddings])
         
         # Determine if same person
         is_same_person = similarity >= DEFAULT_SIMILARITY_THRESHOLD
