@@ -52,6 +52,9 @@ else \n\
   uvicorn main:app --host 0.0.0.0 --port 8001; \n\
 fi' > /app/start.sh && chmod +x /app/start.sh
 
+# Make sure the start script is executable
+RUN chmod +x /app/start.sh
+
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
@@ -89,5 +92,5 @@ ENV MODEL_PATH=/app/models/facenet/20180402-114759.pb \
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8001/health').raise_for_status()"
 
-# Run the application using our setup script
+# Run the application using our updated start script
 CMD ["/app/start.sh"]

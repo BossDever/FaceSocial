@@ -187,9 +187,9 @@ class ModelEnsemble:
         # ค่าน้ำหนักเริ่มต้นใหม่ตามประสิทธิภาพของแต่ละโมเดล
         # ให้น้ำหนักกับ ArcFace มากขึ้น เนื่องจากมีความแม่นยำสูงกว่า
         self.default_weights = {
-            'facenet': 0.25,  # ลดลงจาก 0.35
-            'arcface': 0.50,  # เพิ่มขึ้นจาก 0.35
-            'cosface': 0.25   # ลดลงจาก 0.30
+            'facenet': 0.20,  # ลดลงจาก 0.25
+            'arcface': 0.60,  # เพิ่มขึ้นจาก 0.50
+            'cosface': 0.20   # ลดลงจาก 0.25
         }
         
         # นำค่าน้ำหนักมาใช้กับโมเดลที่โหลดได้สำเร็จ
@@ -203,6 +203,9 @@ class ModelEnsemble:
         if total_weight > 0 and abs(total_weight - 1.0) > 1e-6:
             for model_name in self.model_weights:
                 self.model_weights[model_name] /= total_weight
+                
+        # Log the final weights
+        print(f"Model weights: {self.model_weights}")
     
     def preprocess_for_model(self, face_image: np.ndarray, model_name: str) -> np.ndarray:
         """
