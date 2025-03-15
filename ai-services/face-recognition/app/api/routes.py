@@ -838,3 +838,245 @@ async def face_recognition_demo():
     </html>
     """
     return HTMLResponse(content=html_content)
+
+@router.get("/demo-multiple")
+async def face_recognition_demo_multiple():
+    """
+    Show a demo page for testing Face Recognition with multiple faces.
+    """
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Face Recognition Multi-Face Demo</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+            h1, h2, h3 { color: #333; }
+            .container { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px; }
+            .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; flex: 1; min-width: 300px; background: #f9f9f9; }
+            .result-box { margin-top: 15px; padding: 10px; border: 1px solid #eee; border-radius: 5px; background: white; }
+            img { max-width: 100%; border: 1px solid #eee; border-radius: 4px; max-height: 200px; object-fit: cover; }
+            button { padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+            button:hover { background-color: #45a049; }
+            input, select { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+            .face-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+            .face-item { position: relative; width: 100px; height: 100px; margin-bottom: 10px; }
+            .face-item img { width: 100%; height: 100%; object-fit: cover; }
+            .face-item .remove { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 20px; height: 20px; line-height: 20px; text-align: center; cursor: pointer; }
+            .log { font-family: monospace; font-size: 12px; overflow: auto; max-height: 200px; background: #f5f5f5; padding: 10px; margin-top: 10px; border-radius: 4px; }
+            .similarity-high { color: green; font-weight: bold; }
+            .similarity-med { color: orange; }
+            .similarity-low { color: red; }
+        </style>
+    </head>
+    <body>
+        <h1>Face Recognition with Multiple Reference Faces</h1>
+        
+        <div class="container">
+            <div class="card">
+                <h3>Query Face</h3>
+                <input type="file" id="query-face-upload" accept="image/*" onchange="previewImage('query-face-upload', 'query-face-preview')">
+                <div class="image-preview">
+                    <img id="query-face-preview" src="" alt="Preview" style="display: none">
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Reference Faces (Upload up to 5)</h3>
+                <input type="file" id="reference-face-upload" accept="image/*" onchange="addReferenceImage()" multiple>
+                <div class="face-gallery" id="reference-faces-gallery"></div>
+                <p><strong>Count:</strong> <span id="face-count">0</span>/5</p>
+                <button onclick="clearReferenceImages()">Clear All</button>
+            </div>
+            
+            <div class="card">
+                <h3>Comparison Settings</h3>
+                <label for="comparison-method">Comparison Method:</label>
+                <select id="comparison-method">
+                    <option value="max">Maximum Similarity (Best Match)</option>
+                    <option value="average">Average Similarity</option>
+                </select>
+                <br>
+                <button onclick="compareWithMultiple()">Compare Face</button>
+                
+                <div class="result-box" id="comparison-result">
+                    <p>Comparison results will appear here...</p>
+                </div>
+                <div class="log" id="comparison-log"></div>
+            </div>
+        </div>
+        
+        <script>
+            // Global variables
+            const maxFaces = 5;
+            let referenceFaces = [];
+            
+            // Preview image function
+            function previewImage(inputId, previewId) {
+                const file = document.getElementById(inputId).files[0];
+                const preview = document.getElementById(previewId);
+                
+                if (file) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    }
+                    
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            // Add reference image
+            function addReferenceImage() {
+                const fileInput = document.getElementById('reference-face-upload');
+                if (!fileInput.files || fileInput.files.length === 0) return;
+                
+                for (const file of fileInput.files) {
+                    if (referenceFaces.length >= maxFaces) {
+                        alert(`Maximum ${maxFaces} reference faces allowed. Please remove some faces first.`);
+                        break;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const faceId = Date.now() + Math.floor(Math.random() * 1000);
+                        referenceFaces.push({
+                            id: faceId,
+                            base64: e.target.result.split(',')[1],
+                            dataUrl: e.target.result
+                        });
+                        
+                        updateReferenceGallery();
+                    };
+                    
+                    reader.readAsDataURL(file);
+                }
+                
+                // Reset file input
+                fileInput.value = "";
+            }
+            
+            // Update reference gallery
+            function updateReferenceGallery() {
+                const gallery = document.getElementById('reference-faces-gallery');
+                const counter = document.getElementById('face-count');
+                
+                gallery.innerHTML = '';
+                counter.textContent = referenceFaces.length;
+                
+                referenceFaces.forEach(face => {
+                    const faceItem = document.createElement('div');
+                    faceItem.className = 'face-item';
+                    
+                    const img = document.createElement('img');
+                    img.src = face.dataUrl;
+                    img.alt = 'Reference face';
+                    
+                    const removeBtn = document.createElement('div');
+                    removeBtn.className = 'remove';
+                    removeBtn.textContent = 'X';
+                    removeBtn.onclick = () => removeReferenceImage(face.id);
+                    
+                    faceItem.appendChild(img);
+                    faceItem.appendChild(removeBtn);
+                    gallery.appendChild(faceItem);
+                });
+            }
+            
+            // Remove reference image
+            function removeReferenceImage(id) {
+                referenceFaces = referenceFaces.filter(face => face.id !== id);
+                updateReferenceGallery();
+            }
+            
+            // Clear all reference images
+            function clearReferenceImages() {
+                referenceFaces = [];
+                updateReferenceGallery();
+            }
+            
+            // Log to console
+            function log(message) {
+                const logElement = document.getElementById('comparison-log');
+                const timestamp = new Date().toLocaleTimeString();
+                logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+                logElement.scrollTop = logElement.scrollHeight;
+            }
+            
+            // Compare with multiple faces
+            async function compareWithMultiple() {
+                const queryFileInput = document.getElementById('query-face-upload');
+                if (!queryFileInput.files || queryFileInput.files.length === 0) {
+                    alert('Please select a query face image');
+                    return;
+                }
+                
+                if (referenceFaces.length === 0) {
+                    alert('Please upload at least one reference face');
+                    return;
+                }
+                
+                try {
+                    log('Comparing face against ' + referenceFaces.length + ' reference faces...');
+                    
+                    // Get query face base64
+                    const queryReader = new FileReader();
+                    queryReader.onload = async function(e) {
+                        const queryBase64 = e.target.result.split(',')[1];
+                        const referenceBase64List = referenceFaces.map(face => face.base64);
+                        const method = document.getElementById('comparison-method').value;
+                        
+                        // Call API
+                        const response = await fetch('/v1/face/compare-multiple', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                query_face: queryBase64,
+                                reference_faces: referenceBase64List,
+                                method: method
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`API error: ${errorText}`);
+                        }
+                        
+                        const data = await response.json();
+                        log(`Comparison complete: similarity = ${data.similarity.toFixed(4)}`);
+                        
+                        // Determine similarity class for styling
+                        let similarityClass = 'similarity-low';
+                        if (data.similarity >= 0.85) {
+                            similarityClass = 'similarity-high';
+                        } else if (data.similarity >= 0.75) {
+                            similarityClass = 'similarity-med';
+                        }
+                        
+                        // Display results
+                        document.getElementById('comparison-result').innerHTML = `
+                            <p><strong>Similarity Score:</strong> <span class="${similarityClass}">${data.similarity.toFixed(4)}</span></p>
+                            <p><strong>Same Person:</strong> ${data.is_same_person ? 'Yes ✓' : 'No ✗'}</p>
+                            <p><strong>Threshold Used:</strong> ${data.threshold_used}</p>
+                            <p><strong>Processing Time:</strong> ${data.processing_time_ms.toFixed(2)} ms</p>
+                            <p><strong>Method Used:</strong> ${method === 'max' ? 'Maximum Similarity' : 'Average Similarity'}</p>
+                            <p><strong>Reference Faces:</strong> ${referenceFaces.length}</p>
+                        `;
+                    };
+                    
+                    queryReader.readAsDataURL(queryFileInput.files[0]);
+                    
+                } catch (error) {
+                    log(`ERROR: ${error.message}`);
+                    document.getElementById('comparison-result').innerHTML = `
+                        <p style="color: red;">Error: ${error.message}</p>
+                    `;
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
