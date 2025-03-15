@@ -84,6 +84,28 @@ RUN echo "==== CUDA Library Locations ====" && \
 # Run CUDA setup during image build to ensure proper symbolic links
 RUN python /app/tools/cuda_setup.py
 
+# Install CUDA libraries needed for ONNX Runtime and create appropriate symlinks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcublas-12-* \
+    libcublaslt-12-* \
+    libcudnn8* \
+    && mkdir -p /usr/lib/x86_64-linux-gnu \
+    && ln -sf /usr/lib/x86_64-linux-gnu/libcublas.so.12 /usr/lib/x86_64-linux-gnu/libcublas.so.11 \
+    && ln -sf /usr/lib/x86_64-linux-gnu/libcublasLt.so.12 /usr/lib/x86_64-linux-gnu/libcublasLt.so.11 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Enhanced CUDA libraries detection and verification
+RUN echo "==== CUDA Library Detection ====" && \
+    find /usr -name "libcublas.so*" || true && \
+    find /usr -name "libcublasLt.so*" || true && \
+    find /usr -name "libcudnn.so*" || true
+
+# Run our CUDA setup tools during build to ensure symbolic links are created
+COPY app/tools/cuda_setup.py /app/tools/
+COPY app/tools/cuda_manager.py /app/tools/
+RUN chmod +x /app/tools/cuda_setup.py /app/tools/cuda_manager.py && \
+    python /app/tools/cuda_setup.py
+
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \

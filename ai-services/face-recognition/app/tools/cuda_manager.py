@@ -75,6 +75,19 @@ def find_library_files(pattern: str) -> List[str]:
             if os.path.exists(full_path):
                 results.append(full_path)
     
+    # Add direct search for version 12 libraries when looking for version 11
+    if "11" in pattern and "*" not in pattern:
+        v12_pattern = pattern.replace("11", "12")
+        for search_path in search_paths:
+            if not os.path.isdir(search_path):
+                continue
+            
+            # Try direct version 12 file
+            full_path = os.path.join(search_path, v12_pattern)
+            if os.path.exists(full_path):
+                logger.info(f"Found version 12 library for {pattern}: {full_path}")
+                results.append(full_path)
+    
     return results
 
 def create_symlink(source: str, target: str, force: bool = True) -> bool:
@@ -120,8 +133,70 @@ def fix_cuda_libraries() -> Dict[str, bool]:
     """
     results = {}
     
-    # Process each required library
+    # Use more aggressive search for specific libraries needed by ONNX Runtime
+    critical_libs = {
+        "libcublas.so.11": ["/usr/local/cuda/lib64/libcublas.so", "/usr/lib/x86_64-linux-gnu/libcublas.so*"],
+        "libcublasLt.so.11": ["/usr/local/cuda/lib64/libcublasLt.so", "/usr/lib/x86_64-linux-gnu/libcublasLt.so*"]
+    }
+    
+    # Process critical libraries first with special handling
+    for target_lib, search_patterns in critical_libs.items():
+        target_path = os.path.join(TARGET_DIR, target_lib)
+        
+        # Skip if target already exists
+        if os.path.exists(target_path):
+            logger.info(f"✅ {target_lib} already exists")
+            results[target_lib] = True
+            continue
+        
+        # Try to find source library using specific patterns
+        source_lib = None
+        for pattern in search_patterns:
+            # Use glob for wildcard patterns
+            if "*" in pattern:
+                matches = glob.glob(pattern)
+                if matches:
+                    source_lib = matches[0]
+                    break
+            # Direct file check
+            elif os.path.exists(pattern):
+                source_lib = pattern
+                break
+        
+        if source_lib:
+            # Create symbolic link
+            success = create_symlink(source_lib, target_path)
+            results[target_lib] = success
+        else:
+            # Special fallback for CUDA 12 libraries
+            v12_lib = target_lib.replace("11", "12")
+            v12_path = os.path.join(TARGET_DIR, v12_lib)
+            if os.path.exists(v12_path):
+                logger.info(f"Creating link from version 12 library: {v12_lib} -> {target_lib}")
+                success = create_symlink(v12_path, target_path)
+                results[target_lib] = success
+            else:
+                # Last resort - find any libcublas/libcublasLt library
+                lib_prefix = target_lib.split('.')[0]
+                cmd = f"find /usr -name '{lib_prefix}*' | sort"
+                process = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if process.stdout:
+                    potential_libs = process.stdout.strip().split('\n')
+                    if potential_libs:
+                        logger.info(f"Last resort - linking: {potential_libs[0]} -> {target_lib}")
+                        success = create_symlink(potential_libs[0], target_path)
+                        results[target_lib] = success
+                    else:
+                        results[target_lib] = False
+                else:
+                    results[target_lib] = False
+    
+    # Process remaining standard libraries
     for target_lib, source_alternatives in REQUIRED_LIBS.items():
+        # Skip already processed libraries
+        if target_lib in results:
+            continue
+        
         target_path = os.path.join(TARGET_DIR, target_lib)
         
         # Skip if target already exists and is not a symlink
