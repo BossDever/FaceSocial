@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir \
     scikit-learn==1.3.0 \
     pymilvus==2.3.4 \
     redis==4.6.0 \
-    python-multipart
+    python-multipart \
+    onnxruntime-gpu==1.16.0
 
 # สร้างโฟลเดอร์สำหรับเก็บโมเดล
 RUN mkdir -p /app/models/facenet
