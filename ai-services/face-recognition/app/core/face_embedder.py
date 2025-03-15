@@ -59,9 +59,35 @@ class FaceEmbedder:
         # Set the input shape required by the model
         self.input_shape = (160, 160)
         
-        # Initialize model ensemble
-        self.ensemble = ModelEnsemble('/app/models')
-        self.use_ensemble = len(self.ensemble.models) > 1  # Use ensemble if multiple models available
+        # Define multiple possible paths for ensemble models
+        possible_model_paths = [
+            '/app/models',
+            '/app/app/models',
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models'),
+            os.path.dirname(model_path) if model_path else None
+        ]
+
+        # Filter out None values
+        possible_model_paths = [p for p in possible_model_paths if p]
+
+        # Try each path until we find models
+        self.ensemble = None
+        for path in possible_model_paths:
+            print(f"Trying to load ensemble models from: {path}")
+            try:
+                ensemble_instance = ModelEnsemble(path)
+                if len(ensemble_instance.models) > 0:
+                    self.ensemble = ensemble_instance
+                    print(f"Successfully loaded {len(ensemble_instance.models)} models from {path}")
+                    break
+            except Exception as e:
+                print(f"Error loading ensemble from {path}: {str(e)}")
+
+        if self.ensemble is None:
+            print("Could not load any ensemble models, creating empty ensemble")
+            self.ensemble = ModelEnsemble('/app/models')  # Fallback
+
+        self.use_ensemble = len(self.ensemble.models) > 0
         
         print(f"FaceEmbedder initialized with {'ensemble' if self.use_ensemble else 'single model'}")
     
