@@ -258,49 +258,50 @@ class MilvusClient:
             return []
     
     def delete_embeddings(self, embedding_ids: List[str], collection_name: str = None) -> bool:
-        """
-        Delete face embeddings from Milvus.
-        
-        Parameters:
-        - embedding_ids: List of embedding IDs to delete
-        - collection_name: Name of the collection (uses default if None)
-        
-        Returns:
-        - True if successful, False otherwise
-        """
-        collection_name = collection_name or self.default_collection_name
-        
-        if not self.connected:
-            # Use placeholder storage
-            if collection_name not in self.placeholder_storage:
-                return False
-            
-            before_count = len(self.placeholder_storage[collection_name])
-            self.placeholder_storage[collection_name] = [
-                item for item in self.placeholder_storage[collection_name]
-                if item["id"] not in embedding_ids
-            ]
-            after_count = len(self.placeholder_storage[collection_name])
-            
-            print(f"Deleted {before_count - after_count} embeddings from placeholder storage.")
-            return True
-        
-        try:
-            # Ensure collection exists
-            if not utility.has_collection(collection_name):
-                print(f"Collection {collection_name} does not exist.")
-                return False
-            
-            # Get collection
-            collection = Collection(collection_name)
-            
-            # Delete by ID
-            quoted_ids = [f'"{id}"' for id in embedding_ids]
-            expr = f"id in [{', '.join(quoted_ids)}]"
-            
-            print(f"Deleted {len(embedding_ids)} embeddings from Milvus.")
-            return True
-            
-        except Exception as e:
-            print(f"Error deleting embeddings: {str(e)}")
+    """
+    Delete face embeddings from Milvus.
+    
+    Parameters:
+    - embedding_ids: List of embedding IDs to delete
+    - collection_name: Name of the collection (uses default if None)
+    
+    Returns:
+    - True if successful, False otherwise
+    """
+    collection_name = collection_name or self.default_collection_name
+    
+    if not self.connected:
+        # Use placeholder storage
+        if collection_name not in self.placeholder_storage:
             return False
+        
+        before_count = len(self.placeholder_storage[collection_name])
+        self.placeholder_storage[collection_name] = [
+            item for item in self.placeholder_storage[collection_name]
+            if item["id"] not in embedding_ids
+        ]
+        after_count = len(self.placeholder_storage[collection_name])
+        
+        print(f"Deleted {before_count - after_count} embeddings from placeholder storage.")
+        return True
+    
+    try:
+        # Ensure collection exists
+        if not utility.has_collection(collection_name):
+            print(f"Collection {collection_name} does not exist.")
+            return False
+        
+        # Get collection
+        collection = Collection(collection_name)
+        
+        # Delete by ID - แก้ไขจาก f-string เป็นการสร้าง expression ด้วยวิธีอื่น
+        quoted_ids = [f'"{id}"' for id in embedding_ids]
+        expr = f"id in [{', '.join(quoted_ids)}]"
+        collection.delete(expr)
+        
+        print(f"Deleted {len(embedding_ids)} embeddings from Milvus.")
+        return True
+        
+    except Exception as e:
+        print(f"Error deleting embeddings: {str(e)}")
+        return False
