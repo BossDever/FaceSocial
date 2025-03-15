@@ -6,6 +6,7 @@ import cv2
 import time
 import os
 
+from fastapi.responses import HTMLResponse 
 from app.core.face_embedder import FaceEmbedder
 from app.core.milvus_client import MilvusClient
 from app.models.schemas import (
