@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict
 import os
 import tensorflow as tf
+import glob
 
 class GenderDetector:
     """
@@ -17,63 +18,142 @@ class GenderDetector:
         self.model_loaded = False
         self.keras_model_loaded = False
         
-        # (1) ลองโหลดโมเดล Keras สำหรับการตรวจจับเพศ (ที่มีความแม่นยำสูงกว่า)
-        model_paths = [
+        # Extended search path for Keras gender model
+        model_paths = self._find_model_paths([
             '/home/suwit/FaceSocial/ai-services/face-recognition/app/models/keras-facenet-h5/model.h5',
             '/app/app/models/gender/model.h5',
-            './app/models/gender/model.h5'
-        ]
+            '/app/models/gender/model.h5',
+            './app/models/gender/model.h5',
+            # Add recursive search in standard directories
+            '/app/**/*gender*.h5',
+            '/app/**/*face*.h5'
+        ])
         
+        # Try loading Keras gender model
         for path in model_paths:
             if os.path.exists(path):
                 try:
-                    print(f"Loading Keras gender detection model from: {path}")
+                    print(f"Attempting to load gender detection model from: {path}")
                     self.keras_gender_model = tf.keras.models.load_model(path)
-                    self.keras_model_loaded = True
-                    print("Keras gender detection model loaded successfully")
-                    break
+                    
+                    # Verify model works by testing it
+                    if self._verify_keras_model():
+                        self.keras_model_loaded = True
+                        print(f"✓ Gender detection model loaded successfully from: {path}")
+                        break
+                    else:
+                        print(f"✗ Model at {path} loaded but failed verification")
+                        # Continue trying other models
                 except Exception as e:
-                    print(f"Failed to load Keras gender model: {str(e)}")
+                    print(f"✗ Failed to load gender model from {path}: {str(e)}")
         
-        # (2) ลองโหลดโมเดล Caffe สำหรับการตรวจจับเพศ (ใช้เป็นตัวสำรอง)
-        proto_paths = [
+        if not self.keras_model_loaded:
+            print("⚠ No Keras gender detection model loaded successfully")
+        
+        # Try to load Caffe model as backup
+        proto_paths = self._find_model_paths([
             '/app/models/gender/gender_deploy.prototxt',
             '/app/app/models/gender/gender_deploy.prototxt',
-            './app/models/gender/gender_deploy.prototxt'
-        ]
+            './app/models/gender/gender_deploy.prototxt',
+            '/app/**/gender*.prototxt'
+        ])
         
-        model_files = [
+        model_files = self._find_model_paths([
             '/app/models/gender/gender_net.caffemodel',
             '/app/app/models/gender/gender_net.caffemodel',
-            './app/models/gender/gender_net.caffemodel'
-        ]
+            './app/models/gender/gender_net.caffemodel',
+            '/app/**/gender*.caffemodel'
+        ])
         
         # Try to find prototxt and model files
-        proto_file = None
-        model_file = None
-        
-        for path in proto_paths:
-            if os.path.exists(path):
-                proto_file = path
-                break
-                
-        for path in model_files:
-            if os.path.exists(path):
-                model_file = path
-                break
+        proto_file = next((p for p in proto_paths if os.path.exists(p)), None)
+        model_file = next((p for p in model_files if os.path.exists(p)), None)
         
         # If both files found, load the model
         if proto_file and model_file:
             try:
-                print(f"Loading Caffe gender detection model from: {model_file}")
+                print(f"Loading Caffe gender detection model:\n  - Proto: {proto_file}\n  - Model: {model_file}")
                 self.gender_net = cv2.dnn.readNet(proto_file, model_file)
-                self.model_loaded = True
-                print("Caffe gender detection model loaded successfully")
+                
+                # Test if model works
+                if self._verify_caffe_model():
+                    self.model_loaded = True
+                    print("✓ Caffe gender detection model loaded and verified")
+                else:
+                    print("✗ Caffe model loaded but failed verification")
             except Exception as e:
-                print(f"Failed to load Caffe gender detection model: {str(e)}")
+                print(f"✗ Failed to load Caffe gender detection model: {str(e)}")
                 self.model_loaded = False
         else:
-            print("Caffe gender detection model files not found, will use fallback method")
+            print("⚠ Caffe gender detection model files not found")
+            
+        # Create a logger to report status
+        self._log_status()
+            
+    def _find_model_paths(self, path_patterns: List[str]) -> List[str]:
+        """Find model files matching the given patterns with glob"""
+        found_paths = []
+        for pattern in path_patterns:
+            if '**' in pattern:  # Recursive glob pattern
+                found_paths.extend(glob.glob(pattern, recursive=True))
+            else:  # Direct path
+                found_paths.append(pattern)
+        return found_paths
+    
+    def _verify_keras_model(self) -> bool:
+        """Verify Keras model works by testing it with a dummy input"""
+        try:
+            # Create a dummy input of appropriate shape
+            if not hasattr(self, 'keras_gender_model'):
+                return False
+                
+            input_shape = self.keras_gender_model.input_shape
+            if input_shape is None:
+                return False
+                
+            # Remove batch dimension if it's None
+            if input_shape[0] is None:
+                input_shape = input_shape[1:]
+                
+            # Create a sample input - all zeros
+            dummy_input = np.zeros((1,) + input_shape)
+            
+            # Try prediction
+            _ = self.keras_gender_model.predict(dummy_input, verbose=0)
+            return True
+        except Exception as e:
+            print(f"Keras model verification failed: {str(e)}")
+            return False
+            
+    def _verify_caffe_model(self) -> bool:
+        """Verify Caffe model works by testing it with a dummy input"""
+        try:
+            if not hasattr(self, 'gender_net'):
+                return False
+                
+            # Create a dummy blob image (3x227x227)
+            dummy_blob = np.zeros((1, 3, 227, 227), dtype=np.float32)
+            
+            # Try inference
+            self.gender_net.setInput(dummy_blob)
+            _ = self.gender_net.forward()
+            return True
+        except Exception as e:
+            print(f"Caffe model verification failed: {str(e)}")
+            return False
+            
+    def _log_status(self):
+        """Log the status of loaded models"""
+        status = {
+            "keras_model": "Loaded ✓" if self.keras_model_loaded else "Not loaded ✗",
+            "caffe_model": "Loaded ✓" if self.model_loaded else "Not loaded ✗",
+            "fallback_method": "Enabled ✓" if not (self.keras_model_loaded or self.model_loaded) else "Disabled (using models) ✗"
+        }
+        
+        print("\n=== Gender Detection Status ===")
+        for k, v in status.items():
+            print(f"  {k}: {v}")
+        print("============================\n")
             
     def predict_gender(self, face_image: np.ndarray) -> Tuple[str, float]:
         """
