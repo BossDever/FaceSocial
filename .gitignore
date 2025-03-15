@@ -35,6 +35,7 @@ env/
 *.onnx
 *.tflite
 models/weights/
+.ckpt
 
 # Logs
 logs/
