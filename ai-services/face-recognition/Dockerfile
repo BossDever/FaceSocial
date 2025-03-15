@@ -55,6 +55,20 @@ fi' > /app/start.sh && chmod +x /app/start.sh
 # Make sure the start script is executable
 RUN chmod +x /app/start.sh
 
+# Create start.sh script with CUDA library setup
+COPY app/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Explicitly install CUDA libraries
+RUN apt-get update && apt-get install -y \
+    aptitude \
+    && aptitude search -F "%p" "libcublas|libcudnn" \
+    && apt-get install -y --no-install-recommends \
+    libcublas-12-* \
+    libcublaslt-12-* \
+    libcudnn8* \
+    && rm -rf /var/lib/apt/lists/*
+
 # ติดตั้ง Python packages
 RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
