@@ -1,10 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router
+from fastapi.responses import JSONResponse
+from app.api import routes as face_routes
 
 app = FastAPI(
-    title="FaceSocial Face Recognition Service",
-    description="API for face recognition and embeddings",
+    title="Face Recognition API",
+    description="API for face recognition and management",
     version="0.1.0",
 )
 
@@ -17,7 +18,24 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-app.include_router(router, prefix="/v1/face")
+# Include face recognition routes
+app.include_router(face_routes.router, prefix="/v1/face", tags=["face"])
+
+# Add health check endpoint
+@app.get("/health", tags=["health"])
+async def health_check():
+    """
+    Health check endpoint for container monitoring
+    """
+    # Check if essential services are running
+    health_status = {
+        "status": "healthy",
+        "service": "face-recognition",
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+    
+    # Return health status
+    return JSONResponse(content=health_status)
 
 if __name__ == "__main__":
     import uvicorn

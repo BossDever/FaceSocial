@@ -6,6 +6,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    # Add CUDA and cuDNN dependencies for ONNX Runtime
+    cuda-cudart-11-* \
+    libcublas-11-* \
+    libcublasLt11 \
+    libcudnn8 \
     && rm -rf /var/lib/apt/lists/*
 
 # ติดตั้ง Python packages
