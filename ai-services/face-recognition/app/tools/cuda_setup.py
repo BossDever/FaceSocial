@@ -115,6 +115,26 @@ def check_onnxruntime_cuda() -> bool:
         print(f"Error checking ONNX Runtime providers: {str(e)}")
         return False
 
+def fix_cuda_libraries() -> Dict[str, bool]:
+    """
+    Fix CUDA libraries by creating necessary symbolic links.
+    """
+    results = {}
+    for target_lib, source_alternatives in REQUIRED_LIBS.items():
+        target_path = os.path.join(TARGET_DIR, target_lib)
+        if os.path.exists(target_path):
+            results[target_lib] = True
+            continue
+        for pattern in source_alternatives:
+            matches = find_library_files(pattern)
+            if matches:
+                create_symlink(matches[0], target_path)
+                results[target_lib] = True
+                break
+        else:
+            results[target_lib] = False
+    return results
+
 def main():
     """Main function to set up CUDA libraries"""
     print("CUDA Library Setup for ONNX Runtime")

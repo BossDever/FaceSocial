@@ -226,12 +226,6 @@ def _create_symlink_for_lib(lib_name: str) -> bool:
 def create_onnx_session(model_path: str) -> ort.InferenceSession:
     """
     Create an ONNX runtime session with the best available provider.
-    
-    Parameters:
-        model_path: Path to the ONNX model file
-        
-    Returns:
-        ort.InferenceSession: ONNX runtime session
     """
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
@@ -240,33 +234,12 @@ def create_onnx_session(model_path: str) -> ort.InferenceSession:
     print(f"Creating ONNX session for {model_path} with providers: {providers}")
     
     try:
-        # Try with specified providers
         session_options = ort.SessionOptions()
-        # Enable optimization for better performance
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        session = ort.InferenceSession(
-            model_path, 
-            providers=providers,
-            sess_options=session_options
-        )
-        
-        # Verify provider was actually used
+        session = ort.InferenceSession(model_path, providers=providers, sess_options=session_options)
         used_provider = session.get_providers()[0]
         print(f"✓ ONNX Session created with provider: {used_provider}")
-        
         return session
     except Exception as e:
         print(f"✗ Failed to create ONNX session with {providers}: {e}")
-        print("Falling back to CPU provider...")
-        
-        try:
-            # Fall back to CPU only
-            session = ort.InferenceSession(
-                model_path, 
-                providers=["CPUExecutionProvider"]
-            )
-            print("✓ ONNX Session created with CPU provider")
-            return session
-        except Exception as e2:
-            print(f"✗ Failed to create CPU session: {e2}")
-            raise RuntimeError(f"Could not load ONNX model: {e2}")
+        raise RuntimeError(f"Could not load ONNX model: {e}")

@@ -48,6 +48,12 @@ class ModelEnsemble:
         self._init_weights()
         
         print(f"Loaded {len(self.models)} models for ensemble: {list(self.models.keys())}")
+        for model_name, model_info in self.models.items():
+            if model_info['type'] == 'onnx':
+                provider = model_info['session'].get_providers()[0]
+                print(f"Model '{model_name}' is using ONNX provider: {provider}")
+            else:
+                print(f"Model '{model_name}' loaded successfully (type: {model_info['type']})")
     
     def _load_facenet(self):
         """Load FaceNet model if available"""
