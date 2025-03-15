@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir \
     pymilvus==2.3.4 \
     redis==4.6.0 \
     python-multipart \
-    onnxruntime-gpu==1.16.0
+    onnxruntime-gpu==1.16.0 \
+    requests
 
 # สร้างโฟลเดอร์สำหรับเก็บโมเดล
 RUN mkdir -p /app/models/facenet
@@ -32,5 +33,21 @@ EXPOSE 8001
 # กำหนด working directory
 WORKDIR /app
 
+# Environment variables for configuration
+ENV MODEL_PATH=/app/models/facenet/20180402-114759.pb \
+    MILVUS_HOST=milvus \
+    MILVUS_PORT=19530 \
+    REDIS_HOST=redis \
+    REDIS_PORT=6379 \
+    ENVIRONMENT=production
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8001/health').raise_for_status()"
+
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+CMD if [ "$ENVIRONMENT" = "development" ]; then \
+        uvicorn main:app --host 0.0.0.0 --port 8001 --reload; \
+    else \
+        uvicorn main:app --host 0.0.0.0 --port 8001; \
+    fi
