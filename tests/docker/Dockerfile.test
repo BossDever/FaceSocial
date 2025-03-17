@@ -1,0 +1,20 @@
+FROM facesocial-base:11.8
+
+WORKDIR /app/test
+
+# คัดลอกไฟล์ทดสอบ
+COPY tests/docker/test_base_image.py /app/test/
+COPY tests/docker/test_gpu_compatibility.py /app/test/
+
+# ทำให้ไฟล์ทดสอบสามารถรันได้
+RUN chmod +x /app/test/test_base_image.py
+RUN chmod +x /app/test/test_gpu_compatibility.py
+
+# สร้างไฟล์สคริปต์สำหรับรันการทดสอบที่ถูกต้อง
+RUN echo '#!/bin/bash' > /app/test/run_tests.sh
+RUN echo 'python /app/test/test_base_image.py' >> /app/test/run_tests.sh
+RUN echo 'python /app/test/test_gpu_compatibility.py' >> /app/test/run_tests.sh
+RUN chmod +x /app/test/run_tests.sh
+
+# รันการทดสอบ
+CMD ["/app/test/run_tests.sh"]

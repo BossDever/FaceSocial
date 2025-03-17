@@ -1,0 +1,112 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.env
+venv/
+ENV/
+
+# PyTorch models
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.hdf5
+*.pb
+*.onnx
+*.trt
+
+# TensorRT engines
+*.engine
+*.plan
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Docker
+.docker/
+
+# Milvus
+milvus/data/
+milvus/logs/
+milvus/db/
+
+# Redis
+redis/data/
+
+# Large data files
+*.csv
+*.json
+*.npy
+*.npz
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tif
+*.tiff
+*.mp4
+*.avi
+*.mov
+
+# Model directories - exclude all model directories but keep their structure
+ai-services/face-recognition/models/*/onnx/*
+!ai-services/face-recognition/models/*/onnx/.gitkeep
+ai-services/face-recognition/models/*/tensorrt/*
+!ai-services/face-recognition/models/*/tensorrt/.gitkeep
+ai-services/face-recognition/models/*/original/*
+!ai-services/face-recognition/models/*/original/.gitkeep
+
+# Similar pattern for other model directories
+ai-services/face-detection/models/*
+!ai-services/face-detection/models/.gitkeep
+ai-services/liveness-detection/*/onnx/*
+!ai-services/liveness-detection/*/onnx/.gitkeep
+ai-services/liveness-detection/*/tensorrt/*
+!ai-services/liveness-detection/*/tensorrt/.gitkeep
+ai-services/liveness-detection/*/original/*
+!ai-services/liveness-detection/*/original/.gitkeep
+ai-services/deepfake-detection/*/onnx/*
+!ai-services/deepfake-detection/*/onnx/.gitkeep
+ai-services/deepfake-detection/*/tensorrt/*
+!ai-services/deepfake-detection/*/tensorrt/.gitkeep
+ai-services/deepfake-detection/*/original/*
+!ai-services/deepfake-detection/*/original/.gitkeep
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.dbnode_modules/
+.env
+__pycache__/
