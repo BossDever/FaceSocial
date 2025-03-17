@@ -6,19 +6,30 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import time
+import logging
 
 # เพิ่ม parent directory เข้าไปใน sys.path เพื่อให้สามารถ import shared modules ได้
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
-from shared.config.settings import settings
-from shared.utils.logging import setup_logging, structured_log
-from shared.middleware.auth import APIKeyMiddleware
+# ตั้งค่า logger แบบพื้นฐานก่อน
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-from api.routes import router as api_router
-from models.scrfd import SCRFDDetector
-
-# ตั้งค่า logger
-logger = setup_logging()
+try:
+    from shared.config.settings import settings
+    from shared.utils.logging import setup_logging, structured_log
+    from shared.middleware.auth import APIKeyMiddleware
+    from face_detection.api.routes import router as api_router
+    from face_detection.models.scrfd import SCRFDDetector
+    
+    # ตั้งค่า logger
+    logger = setup_logging()
+except ImportError as e:
+    logger.error(f"Import error: {e}")
+    sys.exit(1)
 
 # สร้าง FastAPI application
 app = FastAPI(
@@ -50,14 +61,37 @@ async def startup_event():
     try:
         # โหลดโมเดล SCRFD
         logger.info("Loading SCRFD face detector model...")
+        
+        # ตรวจสอบ MODEL_PATH และไฟล์โมเดล
+        model_path = settings.MODEL_PATH
+        logger.info(f"Model path from settings: {model_path}")
+        
+        model_file = os.path.join(model_path, "face-detection/scrfd/scrfd_10g_bnkps.onnx")
+        logger.info(f"Complete model path: {model_file}")
+        
+        if os.path.exists(model_file):
+            logger.info(f"Model file exists at: {model_file}")
+        else:
+            logger.error(f"Model file NOT found at: {model_file}")
+            logger.info("Searching for model file...")
+            
+            # ค้นหาไฟล์โมเดลในโฟลเดอร์ models
+            for root, dirs, files in os.walk(model_path):
+                for file in files:
+                    if file.endswith('.onnx'):
+                        logger.info(f"Found ONNX file: {os.path.join(root, file)}")
+            
+            logger.error("Cannot proceed without model file")
+            return
+        
         face_detector = SCRFDDetector(
-            model_file=os.path.join(settings.MODEL_PATH, "face-detection/scrfd/scrfd_10g_bnkps.onnx"),
+            model_file=model_file,
             use_gpu=settings.USE_GPU,
             gpu_id=settings.GPU_IDS[0] if settings.GPU_IDS else 0
         )
         logger.info("SCRFD face detector model loaded successfully")
     except Exception as e:
-        logger.error(f"Failed to load face detector model: {str(e)}")
+        logger.error(f"Failed to load face detector model: {str(e)}", exc_info=e)
         # ในกรณีที่โหลดโมเดลไม่สำเร็จ ให้ server ทำงานต่อไปแต่จะส่ง error เมื่อมีการเรียกใช้งาน
 
 # เพิ่ม middleware สำหรับวัดเวลาการตอบสนอง
@@ -94,6 +128,7 @@ async def health_check():
 
 # เปิดใช้งาน server ในโหมด development
 if __name__ == "__main__":
+    logger.info(f"Starting Face Detection Service on 0.0.0.0:8000...")
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
