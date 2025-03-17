@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     
     # Model Settings
-    MODEL_PATH: str = os.getenv("MODEL_PATH", "/app/models")
+    MODEL_PATH: str = os.getenv("MODEL_PATH", "/home/suwit/FaceSocial/ai-services/models")
     USE_TENSORRT: bool = os.getenv("USE_TENSORRT", "True").lower() == "true"
     PRECISION: str = os.getenv("PRECISION", "fp16")  # fp16, fp32, int8
     
