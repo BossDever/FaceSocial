@@ -28,9 +28,8 @@ ENV PYTHONUNBUFFERED=1
 # คัดลอกโค้ด
 COPY ./ai-services /app
 
-# เปลี่ยนเป็น non-root user
-USER facesocial
-
-# รัน Service
+# เปลี่ยนเป็น directory ที่ต้องการรัน
 WORKDIR /app/face-detection
-CMD ["python", "/app/face-detection/main.py"]
+
+# แก้ไข CMD ให้ถูกต้อง
+CMD ["python", "main.py"]
