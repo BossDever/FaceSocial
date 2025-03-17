@@ -33,4 +33,4 @@ USER facesocial
 
 # รัน Service
 WORKDIR /app/face-detection
-CMD ["python", "-u", "main.py"]
+CMD ["python", "/app/face-detection/main.py"]
