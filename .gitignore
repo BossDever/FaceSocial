@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual env
+.venv/
+env/
+venv/
+ENV/
+*.env
+*.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Colab output
+*.ipynb
+*.ipynb-output
+
+# PyTorch / TensorFlow
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.onnx
+*.pb
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+nohup.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+*.pid.lock
+docker-compose.override.yml
+*.bak
+
+# Node (ถ้ามี frontend)
+node_modules/
+dist/
+build/
+
+# Output / temp
+*.tmp
+*.temp
+*.out
+*.bak
+*.cache/
+.cache/
+__temp__/
+
+# Data & media
+*.jpg
+*.png
+*.mp4
+*.avi
+*.mov
+*.csv
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Model folders
+models/
+checkpoints/
+weights/
+runs/
+output/
+logs/
+
+# Milvus
+milvus/
+volumes/

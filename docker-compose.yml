@@ -1,0 +1,101 @@
+services:
+  # API Gateway
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/api-gateway:/app
+    depends_on:
+      - face-detection
+      - face-recognition
+      - liveness
+      - deepfake
+    networks:
+      - facesocial-network
+    restart: "no"
+
+  # Face Detection Service
+  face-detection:
+    build: ./services/face-detection
+    volumes:
+      - ./models/face-detection:/app/models
+      - ./services/face-detection:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - facesocial-network
+    restart: "no"
+
+  # Face Recognition Service
+  face-recognition:
+    build: ./services/face-recognition
+    volumes:
+      - ./models/face-recognition:/app/models
+      - ./services/face-recognition:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - facesocial-network
+    restart: "no"
+
+  # Liveness Detection Service
+  liveness:
+    build: ./services/liveness
+    volumes:
+      - ./models/liveness:/app/models
+      - ./services/liveness:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - facesocial-network
+    restart: "no"
+
+  # Deepfake Detection Service
+  deepfake:
+    build: ./services/deepfake
+    volumes:
+      - ./models/deepfake:/app/models
+      - ./services/deepfake:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - facesocial-network
+    restart: "no"
+
+  # Frontend
+  frontend:
+    build: ./services/frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./services/frontend:/usr/share/nginx/html
+    depends_on:
+      - api-gateway
+    networks:
+      - facesocial-network
+    restart: "no"
+
+networks:
+  facesocial-network:
+    driver: bridge

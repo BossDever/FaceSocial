@@ -1,0 +1,19 @@
+{
+  "name": "facesocial-frontend",
+  "version": "1.0.0",
+  "description": "FaceSocial Frontend",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next dev -p 3000"
+  },
+  "dependencies": {
+    "next": "^13.4.12",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.4.0",
+    "react-webcam": "^7.1.1",
+    "bootstrap": "^5.3.0",
+    "react-bootstrap": "^2.8.0"
+  }
+}
