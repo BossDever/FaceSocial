@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+import os
+
+# เนื้อหาของไฟล์ app.py ใหม่
+new_app_content = '''
 from flask import Flask, request, jsonify
 import json  # เพิ่มการ import json module มาตรฐาน
 from flask_cors import CORS
@@ -169,3 +174,11 @@ def detect_faces():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+'''
+
+# เขียนไฟล์
+with open('services/face-detection/app.py', 'w') as f:
+    f.write(new_app_content.strip())
+
+print("✅ แก้ไขไฟล์ services/face-detection/app.py สำเร็จ")
+print("รีบิลด์และรีสตาร์ท service ด้วย: docker-compose up -d --build face-detection")

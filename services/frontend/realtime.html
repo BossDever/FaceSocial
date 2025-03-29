@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceSocial AI - การวิเคราะห์ใบหน้าแบบเรียลไทม์</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #video-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+        #status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 20;
+        }
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .fps-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="/">FaceSocial AI</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/">หน้าหลัก</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/realtime.html">วิเคราะห์แบบเรียลไทม์</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <h1 class="text-center mb-4">การวิเคราะห์ใบหน้าแบบเรียลไทม์</h1>
+        
+        <div class="video-container">
+            <video id="webcam" autoplay playsinline width="640" height="480"></video>
+            <canvas id="video-canvas" width="640" height="480"></canvas>
+            <div id="status-bar">
+                <span id="status-text">กำลังเริ่มต้น...</span>
+                <span id="face-count">ใบหน้า: 0</span>
+            </div>
+            <div class="fps-counter" id="fps-counter">0 FPS</div>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn" class="btn btn-success me-2">เริ่มวิเคราะห์</button>
+            <button id="stop-btn" class="btn btn-danger me-2" disabled>หยุดวิเคราะห์</button>
+            <button id="camera-toggle" class="btn btn-primary">สลับกล้อง</button>
+        </div>
+        
+        <div class="alert alert-info mt-4" id="camera-status">
+            กดปุ่ม "เริ่มวิเคราะห์" เพื่อเริ่มการทำงาน
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ตัวแปรสำหรับเก็บสถานะต่างๆ
+        let isRunning = false;
+        let currentStream = null;
+        let currentFacingMode = 'user'; // 'user' คือกล้องหน้า, 'environment' คือกล้องหลัง
+        let processingFrame = false;
+        let lastFrameTime = 0;
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+        let apiThrottle = 300; // ระยะเวลาขั้นต่ำระหว่างการเรียก API (ms)
+        let lastApiCall = 0;
+
+        // คำสั่งสำหรับเรียกใช้ API
+        const API_URL = 'http://localhost:8000';
+
+        // DOM elements
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('video-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+        const faceCountText = document.getElementById('face-count');
+        const fpsCounter = document.getElementById('fps-counter');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const cameraToggleBtn = document.getElementById('camera-toggle');
+        const cameraStatus = document.getElementById('camera-status');
+
+        // เริ่มต้นกล้อง
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        cameraToggleBtn.addEventListener('click', toggleCamera);
+
+        // ฟังก์ชันเริ่มกล้องและการวิเคราะห์
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        width: 640,
+                        height: 480,
+                        facingMode: currentFacingMode
+                    }
+                };
+                
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                // เปลี่ยนสถานะปุ่ม
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                isRunning = true;
+                
+                cameraStatus.classList.remove('alert-info', 'alert-danger');
+                cameraStatus.classList.add('alert-success');
+                cameraStatus.textContent = "กำลังวิเคราะห์...";
+                
+                // เริ่มการวิเคราะห์
+                requestAnimationFrame(processFrame);
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                cameraStatus.classList.remove('alert-info', 'alert-success');
+                cameraStatus.classList.add('alert-danger');
+                cameraStatus.textContent = "ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบว่าอนุญาตการเข้าถึงกล้องแล้ว";
+            }
+        }
+
+        // ฟังก์ชันหยุดกล้องและการวิเคราะห์
+        function stopCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                
+                // ล้างแคนวาส
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // เปลี่ยนสถานะปุ่ม
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                isRunning = false;
+                
+                cameraStatus.classList.remove('alert-success', 'alert-danger');
+                cameraStatus.classList.add('alert-info');
+                cameraStatus.textContent = "หยุดการวิเคราะห์แล้ว";
+                
+                statusText.textContent = "หยุดทำงาน";
+                faceCountText.textContent = "ใบหน้า: 0";
+                fpsCounter.textContent = "0 FPS";
+            }
+        }
+
+        // ฟังก์ชันสลับระหว่างกล้องหน้า/หลัง
+        function toggleCamera() {
+            // สลับกล้อง
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            
+            // หากกำลังทำงานอยู่ ให้รีสตาร์ทกล้อง
+            if (isRunning) {
+                stopCamera();
+                startCamera();
+            }
+        }
+
+        // ฟังก์ชันประมวลผลแต่ละเฟรม
+        async function processFrame() {
+            if (!isRunning) return;
+            
+            const now = performance.now();
+            frameCount++;
+            
+            // อัพเดท FPS ทุก 1 วินาที
+            if (now - lastFpsUpdate > 1000) {
+                const fps = Math.round(frameCount / ((now - lastFpsUpdate) / 1000));
+                fpsCounter.textContent = `${fps} FPS`;
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+            
+            // จำกัดการส่ง API request ไม่ให้เร็วเกินไป
+            if (!processingFrame && now - lastApiCall > apiThrottle) {
+                processingFrame = true;
+                lastApiCall = now;
+                
+                try {
+                    await analyzeCurrentFrame();
+                } catch (error) {
+                    console.error('Error analyzing frame:', error);
+                    statusText.textContent = "เกิดข้อผิดพลาด";
+                }
+                
+                processingFrame = false;
+            }
+            
+            requestAnimationFrame(processFrame);
+        }
+
+        // ฟังก์ชันวิเคราะห์เฟรมปัจจุบัน
+        async function analyzeCurrentFrame() {
+            // ถ้ายังไม่พร้อม
+            if (!video.videoWidth) return;
+            
+            // จับภาพจากวิดีโอไปยังแคนวาสชั่วคราว
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(video, 0, 0);
+            
+            // แปลงเป็น base64
+            const imageData = tempCanvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = imageData.split(',')[1];
+            
+            statusText.textContent = "กำลังวิเคราะห์...";
+            
+            try {
+                // 1. ส่งภาพไปตรวจจับใบหน้า
+                const detectResponse = await fetch(`${API_URL}/api/v1/face-detection`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: base64Data,
+                        include_attributes: true
+                    })
+                });
+                
+                const detectData = await detectResponse.json();
+                
+                if (!detectData.faces || detectData.faces.length === 0) {
+                    // ไม่พบใบหน้า
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    statusText.textContent = "ไม่พบใบหน้า";
+                    faceCountText.textContent = "ใบหน้า: 0";
+                    return;
+                }
+                
+                // 2. ส่งภาพไปวิเคราะห์ความปลอดภัย (ถ้ามีใบหน้า)
+                const securityResponse = await fetch(`${API_URL}/api/v1/security/check`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: base64Data,
+                        checks: 'liveness,deepfake,spoofing'
+                    })
+                });
+                
+                const securityData = await securityResponse.json();
+                
+                // 3. รวมผลลัพธ์และวาดผลบนแคนวาส
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawResults(detectData, securityData);
+                
+                statusText.textContent = "พร้อมใช้งาน";
+                faceCountText.textContent = `ใบหน้า: ${detectData.faces.length}`;
+                
+            } catch (error) {
+                console.error('API request failed:', error);
+                statusText.textContent = "เกิดข้อผิดพลาดในการเรียก API";
+            }
+        }
+
+        // ฟังก์ชันวาดผลบนแคนวาส
+        function drawResults(detectData, securityData) {
+            if (!detectData.faces || detectData.faces.length === 0) return;
+            
+            // วาดกรอบและข้อมูลสำหรับแต่ละใบหน้า
+            detectData.faces.forEach((face, index) => {
+                const [x, y, width, height] = face.bbox;
+                
+                // กำหนดสีตามผลการตรวจจับความปลอดภัย
+                let boxColor = '#00FF00'; // สีเขียวเริ่มต้น
+                
+                if (securityData) {
+                    if ((securityData.liveness && !securityData.liveness.is_live) || 
+                        (securityData.deepfake && securityData.deepfake.is_fake)) {
+                        boxColor = '#FF0000'; // สีแดงถ้าไม่ใช่คนจริงหรือเป็น deepfake
+                    }
+                }
+                
+                // วาดกรอบรอบใบหน้า
+                ctx.strokeStyle = boxColor;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, width, height);
+                
+                // สร้างพื้นหลังสำหรับข้อความ
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(x + width + 5, y, 180, 140);
+                
+                // แสดงข้อมูล
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#FFFFFF';
+                
+                // เพศและอายุ
+                if (face.gender) {
+                    ctx.fillText(`เพศ: ${face.gender === 'male' ? 'ชาย' : 'หญิง'}`, x + width + 10, y + 20);
+                }
+                if (face.age) {
+                    ctx.fillText(`อายุ: ${face.age} ปี`, x + width + 10, y + 40);
+                }
+                
+                // ความมีชีวิต
+                if (securityData && securityData.liveness) {
+                    const liveText = securityData.liveness.is_live ? 'มีชีวิต ✓' : 'ไม่มีชีวิต ✗';
+                    const liveColor = securityData.liveness.is_live ? '#00FF00' : '#FF0000';
+                    ctx.fillStyle = liveColor;
+                    ctx.fillText(`สถานะ: ${liveText}`, x + width + 10, y + 60);
+                    ctx.fillStyle = '#FFFFFF';
+                }
+                
+                // Deepfake
+                if (securityData && securityData.deepfake) {
+                    const fakeText = securityData.deepfake.is_fake ? 'ภาพปลอม ✗' : 'ภาพจริง ✓';
+                    const fakeColor = !securityData.deepfake.is_fake ? '#00FF00' : '#FF0000';
+                    ctx.fillStyle = fakeColor;
+                    ctx.fillText(`Deepfake: ${fakeText}`, x + width + 10, y + 80);
+                    ctx.fillStyle = '#FFFFFF';
+                }
+                
+                // Spoofing
+                if (securityData && securityData.spoofing) {
+                    const spoofText = securityData.spoofing.is_attack ? 'โดนปลอม ✗' : 'ไม่โดนปลอม ✓';
+                    const spoofColor = !securityData.spoofing.is_attack ? '#00FF00' : '#FF0000';
+                    ctx.fillStyle = spoofColor;
+                    ctx.fillText(`Spoofing: ${spoofText}`, x + width + 10, y + 100);
+                    ctx.fillStyle = '#FFFFFF';
+                }
+                
+                // ความเชื่อมั่น
+                if (face.confidence) {
+                    ctx.fillText(`ความเชื่อมั่น: ${(face.confidence * 100).toFixed(0)}%`, x + width + 10, y + 120);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

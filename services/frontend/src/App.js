@@ -14,6 +14,7 @@ import {
 } from "react-bootstrap";
 import Webcam from "react-webcam";
 import axios from "axios";
+import RealtimeFaceAnalysis from "./components/RealtimeFaceAnalysis";
 
 const API_URL = "http://localhost:8000";
 
@@ -720,6 +721,10 @@ function App() {
               )}
             </Card.Body>
           </Card>
+        </Tab>
+
+        <Tab eventKey="realtime" title="วิเคราะห์แบบเรียลไทม์">
+          <RealtimeFaceAnalysis />
         </Tab>
       </Tabs>
 
