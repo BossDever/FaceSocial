@@ -1,0 +1,35 @@
+[4.0K]  models
+├── [4.0K]  deepfake
+│   ├── [4.0K]  domain_adapt_models
+│   │   └── [ 76M]  domain_adaptation_model.pth
+│   ├── [4.0K]  domain_adapt_models_onnx
+│   │   └── [ 69M]  domain_adaptation_model.onnx
+│   ├── [ 76M]  domain_adaptation_model.pth
+│   ├── [4.0K]  ela_models
+│   │   ├── [1.3K]  ela_ensemble_model.pth
+│   │   ├── [ 75M]  ela_model_fold0.pth
+│   │   ├── [ 75M]  ela_model_fold1.pth
+│   │   ├── [ 75M]  ela_model_fold2.pth
+│   │   ├── [ 75M]  ela_model_fold3.pth
+│   │   ├── [ 75M]  ela_model_fold4.pth
+│   │   └── [2.9K]  ela_stacking_ensemble_model.pth
+│   └── [4.0K]  ela_models_onnx
+│       ├── [ 67M]  ela_model_fold0.onnx
+│       ├── [ 67M]  ela_model_fold1.onnx
+│       ├── [ 67M]  ela_model_fold2.onnx
+│       ├── [ 67M]  ela_model_fold3.onnx
+│       ├── [ 67M]  ela_model_fold4.onnx
+│       └── [1.2K]  ela_stacking_ensemble_model.onnx
+├── [4.0K]  face-detection
+│   ├── [   0]  retinaface_r50_v1.onnx
+│   └── [   0]  scrfd_10g_bnkps.onnx
+├── [4.0K]  face-recognition
+│   ├── [249M]  adaface_ir101_webface12m.onnx
+│   ├── [1.4G]  adaface_ir101_webface12m.pth
+│   ├── [249M]  arcface_r100.onnx
+│   └── [249M]  elasticface.onnx
+└── [4.0K]  liveness
+    ├── [1.8M]  2.7_80x80_MiniFASNetV2.pth
+    └── [1.8M]  4_0_0_80x80_MiniFASNetV1SE.pth
+
+9 directories, 24 files
