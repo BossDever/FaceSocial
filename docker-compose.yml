@@ -36,7 +36,7 @@ services:
   face-recognition:
     build: ./services/face-recognition
     volumes:
-      - ./models/face-recognition:/app/models
+      - ./models:/models # Map the models folder
       - ./services/face-recognition:/app
     deploy:
       resources:
@@ -70,6 +70,7 @@ services:
   deepfake:
     build: ./services/deepfake
     volumes:
+      - ./models:/models # Map the models folder
       - ./models/deepfake:/app/models
       - ./services/deepfake:/app
     deploy:
