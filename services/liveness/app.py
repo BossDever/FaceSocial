@@ -1,3 +1,4 @@
+import json  # เพิ่มการ import json module มาตรฐาน
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2
@@ -13,6 +14,20 @@ from PIL import Image
 
 app = Flask(__name__)
 CORS(app)
+
+# Custom JSON Encoder
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
+# Update encoder configuration
+app.json_encoder = NumpyEncoder  # เปลี่ยนจาก app.json.encoder เป็น app.json_encoder
 
 # โหลดโมเดล MiniFASNet
 MODEL_DIR = "models"
@@ -36,34 +51,31 @@ class AntiSpoofPredict:
                 print(f"ไม่พบไฟล์โมเดล {model_name} ที่ {model_path}")
     
     def _load_model(self, model_name, model_path):
-        # แก้ไขโครงสร้างโมเดลให้ตรงกับโมเดลจริง
+        # Adjust the model structure to match the actual model
         model = MiniFASNet()
-        state_dict = torch.load(model_path, map_location=self.device)
-        
-        # ตรวจสอบว่าต้องแปลง model.module หรือไม่
-        keys = iter(state_dict)
-        first_layer_name = next(keys)
-        
-        if first_layer_name.find('module.') >= 0:
-            from collections import OrderedDict
-            new_state_dict = OrderedDict()
-            for key, value in state_dict.items():
-                name_key = key[7:]  # remove 'module.'
-                new_state_dict[name_key] = value
-            state_dict = new_state_dict
-        
-        # ดึงข้อมูลโครงสร้างโมเดลจาก state_dict
-        model_layers = {key: value.shape for key, value in state_dict.items()}
-        print(f"Model: {model_name}, Layers: {len(model_layers)}")
-        
-        # โหลด state_dict แบบยืดหยุ่น
         try:
+            # Attempt to load the model normally
+            state_dict = torch.load(model_path, map_location=self.device)
+            
+            # Check if the state_dict contains 'module.' and adjust keys if necessary
+            keys = iter(state_dict)
+            first_layer_name = next(keys)
+            
+            if first_layer_name.find('module.') >= 0:
+                from collections import OrderedDict
+                new_state_dict = OrderedDict()
+                for key, value in state_dict.items():
+                    name_key = key[7:]  # Remove 'module.'
+                    new_state_dict[name_key] = value
+                state_dict = new_state_dict
+            
+            # Load the state_dict non-strictly (strict=False)
             model.load_state_dict(state_dict, strict=False)
-            print(f"โหลดโมเดล {model_name} สำเร็จแบบมีบางส่วนไม่ตรงกัน")
+            print(f"โหลดโมเดล {model_name} สำเร็จ (non-strict)")
+            
         except Exception as e:
             print(f"เกิดข้อผิดพลาดในการโหลดโมเดล {model_name}: {str(e)}")
-            print("กำลังใช้วิธีการโหลดแบบยืดหยุ่น...")
-            # สร้างโมเดลสำรองแบบง่าย
+            # If loading fails, use a fallback model
             model = SimpleFaceAntiSpoofing()
             
         return model.to(self.device).eval()
@@ -207,7 +219,7 @@ def check_liveness():
         
         # คำนวณผลลัพธ์
         # ค่า score ต่ำ หมายถึง โอกาสเป็นการปลอม (attack) สูง
-        threshold = 0.5
+        threshold = 0.45  # ลดค่า threshold ลงเล็กน้อย
         is_live = score > threshold
         
         result = {

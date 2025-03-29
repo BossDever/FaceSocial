@@ -225,10 +225,13 @@ def detect_deepfake():
             import random
             score = max(0.2, min(0.8, 1.0 - min(1.0, avg_std / 20000.0) * random.uniform(0.85, 1.15)))
             
+            threshold = 0.55  # จากเดิม 0.5
+            is_fake = score > threshold
+            
             result = {
                 "score": float(score),
-                "is_fake": bool(score > 0.5),
-                "threshold": 0.5,
+                "is_fake": bool(is_fake),
+                "threshold": float(threshold),
                 "domain_score": None,
                 "ela_score": float(score),
                 "note": "Using histogram analysis (ELA model not available)"
@@ -256,7 +259,7 @@ def detect_deepfake():
                 ela_prediction = torch.sigmoid(prediction).item()
         
         # แปลผล
-        threshold = 0.5
+        threshold = 0.55  # จากเดิม 0.5
         is_fake = ela_prediction > threshold
         
         result = {

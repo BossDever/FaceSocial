@@ -173,7 +173,23 @@ async def security_check(
         result["spoofing"] = spoofing_result
         if spoofing_result.get("is_attack", False):
             result["is_real_face"] = False
-    
+
+    # ถ้ามีผลการตรวจ Liveness
+    if "liveness" in result:
+        if not result["liveness"].get("is_live", True):
+            # ให้น้ำหนักกับผล liveness มากกว่า
+            result["is_real_face"] = False
+            result["primary_reason"] = "liveness_failure"
+
+    # ถ้ามีผลการตรวจ Deepfake และยังไม่มีสาเหตุหลัก
+    if "deepfake" in result and not result.get("primary_reason"):
+        if result["deepfake"].get("is_fake", False):
+            # ถ้า liveness ผ่าน แต่ deepfake ไม่ผ่าน
+            # ให้ตรวจสอบค่า score ด้วย
+            if result["deepfake"].get("score", 0) > 0.60:
+                result["is_real_face"] = False
+                result["primary_reason"] = "deepfake_failure"
+
     return result
 
 @app.get("/api/v1/status")
